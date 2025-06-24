@@ -21,6 +21,7 @@ NTFY_TOPIC = "pasa-alerts"
 MTPASA_URL = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
 TIMEZONE = pytz.timezone("Australia/Sydney")
 MAX_RUNTIME_SECONDS = 180  # kill script if it runs longer than 3 minutes
+MIN_ZIP_SIZE_BYTES = 100_000  # skip ZIPs smaller than 100 KB (likely incomplete)
 
 
 def log(msg):
@@ -31,7 +32,6 @@ def timeout_handler(signum, frame):
     log("⏱️ Timeout exceeded. Aborting.")
     send_ntfy("⚠️ PASA Monitor timed out after 3 minutes.")
     sys.exit(1)
-
 
 signal.signal(signal.SIGALRM, timeout_handler)
 signal.alarm(MAX_RUNTIME_SECONDS)
@@ -52,7 +52,9 @@ def list_files():
 def is_valid_zip(url):
     try:
         head = requests.head(url, timeout=10)
-        return 'zip' in head.headers.get('Content-Type', '')
+        content_type = head.headers.get('Content-Type', '')
+        content_length = int(head.headers.get('Content-Length', '0'))
+        return 'zip' in content_type and content_length >= MIN_ZIP_SIZE_BYTES
     except Exception:
         return False
 
@@ -108,6 +110,7 @@ if __name__ == "__main__":
     valid_files = [(name, url) for name, url in reversed(all_files) if is_valid_zip(url)]
     if len(valid_files) < 2:
         log("Not enough valid files to compare.")
+        send_ntfy("⚠️ Not enough valid MTPASA files available for comparison.")
         exit(1)
 
     (name1, url1), (name2, url2) = valid_files[-2:]  # older → newer
@@ -124,4 +127,4 @@ if __name__ == "__main__":
         send_ntfy(summary)
         log("Alert sent.")
 
-signal.alarm(0)  # Cancel alarm on success
+signal.alarm(0)  # Cancel timeout on success
