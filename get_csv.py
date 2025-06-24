@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 # Hardcoded URLs to download
 URL_OLD = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/PUBLIC_MTPASADUIDAVAILABILITY_202506241500_0000000469074180.zip"
 URL_NEW = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/PUBLIC_MTPASADUIDAVAILABILITY_202506241800_0000000469093579.zip"
+NTFY_URL = "https://ntfy.sh/pasa-alerts"
 
 def extract_csv(url):
     print(f"Downloading: {url}")
@@ -59,18 +60,24 @@ def compare_availability(df_old, df_new):
     merged["CHANGE"] = merged["AVAIL_NEW"] - merged["AVAIL_OLD"]
     changes = merged[merged["CHANGE"] != 0]
 
+    message_lines = []
+
     if changes.empty:
-        print("No DUID availability changes detected.")
+        message_lines.append("No DUID availability changes detected.")
     else:
-        print("\n🔄 Changes in Availability by DUID:")
+        message_lines.append("🔄 Changes in Availability by DUID:")
         for duid, group in changes.groupby("DUID"):
             grouped_ranges = group_consecutive_changes(group)
-            print(f"\n{duid}:")
+            message_lines.append(f"\n{duid}:")
             for start, end, change in grouped_ranges:
                 if start == end:
-                    print(f"  {start.date()}: {change:+} MW")
+                    message_lines.append(f"  {start.date()}: {change:+} MW")
                 else:
-                    print(f"  {start.date()} to {end.date()}: {change:+} MW")
+                    message_lines.append(f"  {start.date()} to {end.date()}: {change:+} MW")
+
+    full_message = "\n".join(message_lines)
+    print("\n" + full_message)
+    requests.post(NTFY_URL, data=full_message.encode("utf-8"))
 
 if __name__ == "__main__":
     df_old = extract_csv(URL_OLD)
