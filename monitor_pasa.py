@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 import pytz
 import signal
 import sys
+import time
 
 NTFY_TOPIC = "pasa-alerts"
 MTPASA_URL = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
@@ -46,6 +47,7 @@ def list_files():
         for a in soup.find_all('a')
         if a.text.endswith(".zip") and "PUBLIC" in a.text
     ]
+    log(f"Found {len(files)} files total")
     return sorted(files)
 
 
@@ -54,13 +56,15 @@ def is_valid_zip(url):
         head = requests.head(url, timeout=10)
         content_type = head.headers.get('Content-Type', '')
         content_length = int(head.headers.get('Content-Length', '0'))
+        log(f"Checking: {url[-40:]} | Type: {content_type} | Size: {content_length} bytes")
         return 'zip' in content_type and content_length >= MIN_ZIP_SIZE_BYTES
-    except Exception:
+    except Exception as e:
+        log(f"HEAD request failed for {url[-40:]}: {e}")
         return False
 
 
 def extract_csv_from_zip(url):
-    log(f"Downloading ZIP: {url}")
+    log(f"Downloading ZIP: {url[-60:]}")
     r = requests.get(url, timeout=60)
     with zipfile.ZipFile(BytesIO(r.content)) as z:
         for filename in z.namelist():
@@ -104,16 +108,22 @@ def send_ntfy(summary):
 
 
 if __name__ == "__main__":
-    log("Fetching file list...")
+    log("Starting PASA Monitor job")
     all_files = list_files()
 
-    valid_files = [(name, url) for name, url in reversed(all_files) if is_valid_zip(url)]
+    valid_files = []
+    for name, url in reversed(all_files):
+        if is_valid_zip(url):
+            valid_files.append((name, url))
+        if len(valid_files) == 2:
+            break
+
     if len(valid_files) < 2:
         log("Not enough valid files to compare.")
         send_ntfy("⚠️ Not enough valid MTPASA files available for comparison.")
         exit(1)
 
-    (name1, url1), (name2, url2) = valid_files[-2:]  # older → newer
+    (name1, url1), (name2, url2) = valid_files[::-1]  # older → newer
     log(f"Comparing {name1} to {name2}")
 
     df1 = extract_csv_from_zip(url1)
