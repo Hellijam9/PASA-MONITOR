@@ -1,115 +1,35 @@
 #!/usr/bin/env python3
 """
-Fetches the last 2 MTPASA DUIDAvailability ZIPs from manifest.xml (even across days),
-compares availability by DUID, and pushes a summary to ntfy.sh/pasa-alerts
+Downloads the latest MTPASA DUIDAvailability ZIP,
+extracts the CSV, and prints the first few rows.
 """
-import os
-import zipfile
 import requests
-import pandas as pd
-from datetime import datetime
-from io import BytesIO
 from bs4 import BeautifulSoup
-import signal
-import sys
-import time
+import zipfile
+from io import BytesIO
+import pandas as pd
 
-NTFY_TOPIC = "pasa-alerts"
-MTPASA_MANIFEST = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/manifest.xml"
-MTPASA_BASE = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
-MAX_RUNTIME_SECONDS = 180
+BASE_URL = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
 
+def get_latest_zip_url():
+    r = requests.get(BASE_URL)
+    soup = BeautifulSoup(r.text, "html.parser")
+    zips = [a["href"] for a in soup.find_all("a") if a["href"].endswith(".zip")]
+    latest_zip = sorted(zips)[-1]
+    return BASE_URL + latest_zip
 
-def log(msg):
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
-
-
-def timeout_handler(signum, frame):
-    log("⏱️ Timeout exceeded. Aborting.")
-    send_ntfy("⚠️ PASA Monitor timed out after 3 minutes.")
-    sys.exit(1)
-
-signal.signal(signal.SIGALRM, timeout_handler)
-signal.alarm(MAX_RUNTIME_SECONDS)
-
-
-def send_ntfy(summary):
-    try:
-        requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=summary.encode("utf-8"), timeout=10)
-    except Exception as e:
-        log(f"Failed to send ntfy alert: {e}")
-
-
-def get_last_two_zip_urls():
-    log("Fetching ZIP list from manifest.xml...")
-    r = requests.get(MTPASA_MANIFEST, timeout=20)
-    soup = BeautifulSoup(r.text, "lxml-xml")
-    files = [node.text for node in soup.find_all("FileName") if node.text.endswith(".zip")]
-    files = sorted(files)[-2:]  # Always grab last two regardless of date
-    if len(files) < 2:
-        raise Exception("Manifest has fewer than 2 ZIPs")
-    return [MTPASA_BASE + f for f in files]
-
-
-def extract_csv_from_url(url):
-    for attempt in range(1, 4):
-        try:
-            log(f"Attempt {attempt} downloading ZIP: {url}")
-            r = requests.get(url, timeout=30)
-            with zipfile.ZipFile(BytesIO(r.content)) as z:
-                for filename in z.namelist():
-                    if filename.endswith(".csv"):
-                        log(f"Extracting: {filename}")
-                        return pd.read_csv(z.open(filename))
-        except Exception as e:
-            log(f"Attempt {attempt} failed: {e}")
-            time.sleep(2)
-
-    send_ntfy(f"❌ Failed to download ZIP after 3 attempts: {url.split('/')[-1]}")
-    sys.exit(1)
-
-
-def compare_availability(df1, df2):
-    cols = ["DUID", "Date", "Availability"]
-    df1 = df1[cols].copy()
-    df2 = df2[cols].copy()
-    df1.rename(columns={"Availability": "Avail_1"}, inplace=True)
-    df2.rename(columns={"Availability": "Avail_2"}, inplace=True)
-
-    merged = pd.merge(df1, df2, on=["DUID", "Date"])
-    merged["Change"] = merged["Avail_2"] - merged["Avail_1"]
-    changed = merged[merged["Change"] != 0]
-    return changed.sort_values(["DUID", "Date"])
-
-
-def format_summary(changes):
-    lines = ["MTPASA DUID Availability Changes:\n"]
-    grouped = changes.groupby("DUID")
-    for duid, group in grouped:
-        lines.append(f"\n{duid}:")
-        for _, row in group.iterrows():
-            lines.append(f"  {row['Date']}: {int(row['Change']):+} MW")
-    return "\n".join(lines)
-
+def download_and_extract_csv(zip_url):
+    print(f"Downloading: {zip_url}")
+    r = requests.get(zip_url)
+    with zipfile.ZipFile(BytesIO(r.content)) as z:
+        for filename in z.namelist():
+            if filename.endswith(".csv"):
+                print(f"Extracting: {filename}")
+                df = pd.read_csv(z.open(filename))
+                print(df.head())
+                return
+    print("❌ No CSV found in ZIP.")
 
 if __name__ == "__main__":
-    log("Starting PASA Monitor from manifest")
-    try:
-        urls = get_last_two_zip_urls()
-    except Exception as e:
-        log(f"❌ Failed to retrieve files: {e}")
-        send_ntfy(f"⚠️ Failed to load MTPASA manifest: {e}")
-        sys.exit(1)
-
-    df1 = extract_csv_from_url(urls[0])
-    df2 = extract_csv_from_url(urls[1])
-    changes = compare_availability(df1, df2)
-
-    if changes.empty:
-        log("No changes detected.")
-    else:
-        summary = format_summary(changes)
-        send_ntfy(summary)
-        log("Alert sent.")
-
-signal.alarm(0)
+    zip_url = get_latest_zip_url()
+    download_and_extract_csv(zip_url)
