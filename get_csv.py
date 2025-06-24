@@ -16,8 +16,27 @@ def extract_csv(url):
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
             df = pd.read_csv(f, skiprows=1, low_memory=False)
-            print(df.head())
+            return df
+
+def compare_availability(df_old, df_new):
+    cols = ["DUID", "DAY", "PASAAVAILABILITY"]
+    df_old = df_old[cols].copy()
+    df_new = df_new[cols].copy()
+    df_old.rename(columns={"PASAAVAILABILITY": "AVAIL_OLD"}, inplace=True)
+    df_new.rename(columns={"PASAAVAILABILITY": "AVAIL_NEW"}, inplace=True)
+    merged = pd.merge(df_old, df_new, on=["DUID", "DAY"])
+    merged["CHANGE"] = merged["AVAIL_NEW"] - merged["AVAIL_OLD"]
+    changes = merged[merged["CHANGE"] != 0]
+    if changes.empty:
+        print("No DUID availability changes detected.")
+    else:
+        print("\n🔄 Changes in Availability by DUID:")
+        for duid, group in changes.groupby("DUID"):
+            print(f"\n{duid}:")
+            for _, row in group.iterrows():
+                print(f"  {row['DAY']}: {int(row['CHANGE']):+} MW")
 
 if __name__ == "__main__":
-    extract_csv(URL_OLD)
-    extract_csv(URL_NEW)
+    df_old = extract_csv(URL_OLD)
+    df_new = extract_csv(URL_NEW)
+    compare_availability(df_old, df_new)
