@@ -65,13 +65,21 @@ def is_valid_zip(url):
 
 def extract_csv_from_zip(url):
     log(f"Downloading ZIP: {url[-60:]}")
-    r = requests.get(url, timeout=60)
-    with zipfile.ZipFile(BytesIO(r.content)) as z:
-        for filename in z.namelist():
-            if filename.endswith(".csv"):
-                log(f"Extracting CSV: {filename}")
-                return pd.read_csv(z.open(filename))
-    return pd.DataFrame()
+    for attempt in range(1, 4):
+        try:
+            log(f"Attempt {attempt} to download ZIP")
+            r = requests.get(url, timeout=15)
+            with zipfile.ZipFile(BytesIO(r.content)) as z:
+                for filename in z.namelist():
+                    if filename.endswith(".csv"):
+                        log(f"Extracting CSV: {filename}")
+                        return pd.read_csv(z.open(filename))
+        except Exception as e:
+            log(f"Attempt {attempt} failed: {e}")
+            time.sleep(3)
+
+    send_ntfy(f"❌ Failed to download or read ZIP after 3 attempts: {url[-40:]}")
+    sys.exit(1)
 
 
 def compare_availability(df1, df2):
