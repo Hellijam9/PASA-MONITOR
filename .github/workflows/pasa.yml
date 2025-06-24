@@ -3,7 +3,7 @@ name: MTPASA DUID Availability Monitor
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 23 * * 0'  # Monday 09:20 AEST (Sunday 23:20 UTC)
+    - cron: '20 23 * * 0'  # Monday 09:20 AEST
     - cron: '20 23 * * 1-6'  # Tue–Sat 09:20 AEST
     - cron: '20 2 * * 1-6'   # Tue–Sat 12:20 AEST
     - cron: '20 5 * * 1-6'   # Tue–Sat 15:20 AEST
@@ -27,5 +27,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests beautifulsoup4 lxml pytz
 
-      - name: Run PASA monitor
-        run: python Pasa.py
+      - name: Run PASA moni
