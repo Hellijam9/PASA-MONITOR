@@ -2,16 +2,11 @@ name: PASA Monitor
 
 on:
   schedule:
-    # 7:00 AEST Monday (20:00 UTC Sunday)
-    - cron: '0 20 * * 0'
-    # 9:20 AEST (23:20 UTC), Mon–Sat
-    - cron: '20 23 * * 0-5'
-    # 12:20 AEST (2:20 UTC), Mon–Sat
-    - cron: '20 2 * * 1-6'
-    # 15:20 AEST (5:20 UTC), Mon–Sat
-    - cron: '20 5 * * 1-6'
-    # 18:20 AEST (8:20 UTC), Mon–Sat
-    - cron: '20 8 * * 1-6'
+    - cron: '0 20 * * 0'       # Monday 07:00 AEST (20:00 UTC Sunday)
+    - cron: '20 23 * * 0-5'    # 09:20 AEST Mon–Sat (23:20 UTC)
+    - cron: '20 2 * * 1-6'     # 12:20 AEST Mon–Sat (02:20 UTC)
+    - cron: '20 5 * * 1-6'     # 15:20 AEST Mon–Sat (05:20 UTC)
+    - cron: '20 8 * * 1-6'     # 18:20 AEST Mon–Sat (08:20 UTC)
   workflow_dispatch:
 
 jobs:
@@ -29,7 +24,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas beautifulsoup4 requests pytz
+          pip install pandas requests
+
+      - name: Create data directory
+        run: mkdir -p pasa_data
+
+      - name: Download last 2 MTPASA ZIPs using wget
+        run: |
+          curl -s https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/ | \
+          grep -oE 'PUBLIC_MTPASADUIDAVAILABILITY_[^"<>]*?\.zip' | \
+          sort | tail -n 2 | while read f; do
+            echo "Downloading $f"
+            wget -q "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/$f" -O "pasa_data/$f"
+          done
 
       - name: Run PASA monitor
         run: python monitor_pasa.py
