@@ -1,7 +1,8 @@
-name: Scheduled MTPASA Summary
+name: Triggered MTPASA Summary
 
 on:
   workflow_dispatch:
+  repository_dispatch:
 
 jobs:
   run-mtpasa-scheduler:
@@ -21,5 +22,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests
 
-      - name: Run scheduled script (manual test)
+      - name: Run MTPASA script
         run: python mtpasa_scheduler.py --test
