@@ -1,35 +1,30 @@
-#!/usr/bin/env python3
-"""
-Downloads the latest MTPASA DUIDAvailability ZIP,
-extracts the CSV, and prints the first few rows.
-"""
 import requests
-from bs4 import BeautifulSoup
 import zipfile
-from io import BytesIO
 import pandas as pd
+from io import BytesIO
 
-BASE_URL = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
+ZIP_URL = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/PUBLIC_MTPASADUIDAVAILABILITY_202506241500_0000000469074180.zip"
 
-def get_latest_zip_url():
-    r = requests.get(BASE_URL)
-    soup = BeautifulSoup(r.text, "html.parser")
-    zips = [a["href"] for a in soup.find_all("a") if a["href"].endswith(".zip")]
-    latest_zip = sorted(zips)[-1]
-    return BASE_URL + latest_zip
+def main():
+    print(f"Downloading: {ZIP_URL}")
+    r = requests.get(ZIP_URL)
+    r.raise_for_status()
 
-def download_and_extract_csv(zip_url):
-    print(f"Downloading: {zip_url}")
-    r = requests.get(zip_url)
     with zipfile.ZipFile(BytesIO(r.content)) as z:
-        for filename in z.namelist():
-            if filename.endswith(".csv"):
-                print(f"Extracting: {filename}")
-                df = pd.read_csv(z.open(filename))
-                print(df.head())
-                return
-    print("❌ No CSV found in ZIP.")
+        all_files = z.namelist()
+        print("📦 Files in ZIP:")
+        for f in all_files:
+            print(f" - {f}")
+
+        csv_files = [f for f in all_files if f.lower().endswith(".csv")]
+        if not csv_files:
+            print("❌ No CSV file found in ZIP.")
+            return
+
+        print(f"✅ Extracting: {csv_files[0]}")
+        with z.open(csv_files[0]) as f:
+            df = pd.read_csv(f)
+            print(df.head())
 
 if __name__ == "__main__":
-    zip_url = get_latest_zip_url()
-    download_and_extract_csv(zip_url)
+    main()
