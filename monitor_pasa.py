@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fetches the last 2 MTPASA DUIDAvailability ZIPs from manifest.xml,
+Fetches the last 2 MTPASA DUIDAvailability ZIPs from manifest.xml (even across days),
 compares availability by DUID, and pushes a summary to ntfy.sh/pasa-alerts
 """
 import os
@@ -45,7 +45,9 @@ def get_last_two_zip_urls():
     r = requests.get(MTPASA_MANIFEST, timeout=20)
     soup = BeautifulSoup(r.text, "lxml-xml")
     files = [node.text for node in soup.find_all("FileName") if node.text.endswith(".zip")]
-    files = sorted(files)[-2:]
+    files = sorted(files)[-2:]  # Always grab last two regardless of date
+    if len(files) < 2:
+        raise Exception("Manifest has fewer than 2 ZIPs")
     return [MTPASA_BASE + f for f in files]
 
 
@@ -94,8 +96,6 @@ if __name__ == "__main__":
     log("Starting PASA Monitor from manifest")
     try:
         urls = get_last_two_zip_urls()
-        if len(urls) < 2:
-            raise Exception("Not enough ZIPs found in manifest")
     except Exception as e:
         log(f"❌ Failed to retrieve files: {e}")
         send_ntfy(f"⚠️ Failed to load MTPASA manifest: {e}")
