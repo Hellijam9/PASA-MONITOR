@@ -1,16 +1,10 @@
-name: PASA Monitor
+name: Run Latest MTPASA CSV
 
 on:
-  schedule:
-    - cron: '0 20 * * 0'       # Monday 07:00 AEST (20:00 UTC Sunday)
-    - cron: '20 23 * * 0-5'    # 09:20 AEST Mon–Sat (23:20 UTC)
-    - cron: '20 2 * * 1-6'     # 12:20 AEST Mon–Sat (02:20 UTC)
-    - cron: '20 5 * * 1-6'     # 15:20 AEST Mon–Sat (05:20 UTC)
-    - cron: '20 8 * * 1-6'     # 18:20 AEST Mon–Sat (08:20 UTC)
   workflow_dispatch:
 
 jobs:
-  run-monitor:
+  fetch-latest:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -26,5 +20,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests beautifulsoup4 lxml
 
-      - name: Run PASA monitor
-        run: python monitor_pasa.py
+      - name: Run script
+        run: python Pasa
