@@ -1,22 +1,18 @@
-import requests
-import zipfile
-import pandas as pd
-from io import BytesIO
-
-ZIP_URL = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/PUBLIC_MTPASADUIDAVAILABILITY_202506241500_0000000469074180.zip"
-
-def main():
-    print(f"Downloading: {ZIP_URL}")
-    r = requests.get(ZIP_URL)
-    r.raise_for_status()
-
-    with zipfile.ZipFile(BytesIO(r.content)) as z:
-        # Just grab the first file regardless of extension
-        file_name = z.namelist()[0]
-        print(f"✅ Extracting: {file_name}")
-        with z.open(file_name) as f:
-            df = pd.read_csv(f)
-            print(df.head())
-
 if __name__ == "__main__":
-    main()
+    # TEMP: Compare two known URLs directly
+    url1 = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/PUBLIC_MTPASADUIDAVAILABILITY_202506241500_0000000469074180.zip"
+    url2 = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/PUBLIC_MTPASADUIDAVAILABILITY_202506241800_0000000469093579.zip"
+
+    log(f"Manually comparing:\n- {url1.split('/')[-1]}\n- {url2.split('/')[-1]}")
+
+    df1 = extract_csv_from_zip(url1)
+    df2 = extract_csv_from_zip(url2)
+    changes = compare_availability(df1, df2)
+
+    if changes.empty:
+        log("No changes detected.")
+    else:
+        summary = format_summary(changes)
+        print("\n" + summary)
+        send_ntfy(summary)
+        log("Alert sent.")
