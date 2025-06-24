@@ -1,10 +1,21 @@
-name: Scheduled MTPASA Summary Test
+# .github/workflows/mtpasa_summary_scheduler.yml
+name: MTPASA Summary Scheduler
 
 on:
+  schedule:
+    # Mon–Fri: 09:20, 12:20, 15:20, 18:20 AEST (UTC = AEST - 10)
+    - cron: "20 23 * * 0-4"  # 09:20 AEST Mon–Fri
+    - cron: "20 2 * * 1-5"   # 12:20 AEST Tue–Sat
+    - cron: "20 5 * * 1-5"   # 15:20 AEST Tue–Sat
+    - cron: "20 8 * * 1-5"   # 18:20 AEST Tue–Sat
+    # Morning recaps
+    - cron: "0 21 * * 0"     # 07:00 AEST Monday (recap Fri 18:20 + Sat)
+    - cron: "0 21 * * 1-4"   # 07:00 AEST Tue–Fri (recap prev 18:20)
+
   workflow_dispatch:
 
 jobs:
-  run-mtpasa-scheduler-test:
+  run-summary-scheduler:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,5 +32,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests
 
-      - name: Run scheduled script in TEST mode
-        run: python mtpasa_summary_scheduler.py --test
+      - name: Run summary script
+        run: python mtpasa_summary_scheduler.py
