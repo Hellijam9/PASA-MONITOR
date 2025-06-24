@@ -21,4 +21,4 @@ jobs:
           pip install pandas requests beautifulsoup4 lxml
 
       - name: Run script
-        run: python Pasa
+        run: python Pasa.py
