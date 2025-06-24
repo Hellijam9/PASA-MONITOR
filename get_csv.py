@@ -11,12 +11,10 @@ def main():
     r.raise_for_status()
 
     with zipfile.ZipFile(BytesIO(r.content)) as z:
-        csv_files = [f for f in z.namelist() if f.endswith('.csv')]
-        if not csv_files:
-            print("❌ No CSV found in ZIP.")
-            return
-        print(f"Extracting: {csv_files[0]}")
-        with z.open(csv_files[0]) as f:
+        # Just grab the first file regardless of extension
+        file_name = z.namelist()[0]
+        print(f"✅ Extracting: {file_name}")
+        with z.open(file_name) as f:
             df = pd.read_csv(f)
             print(df.head())
 
