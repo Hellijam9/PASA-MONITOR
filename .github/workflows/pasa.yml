@@ -29,14 +29,17 @@ jobs:
       - name: Create data directory
         run: mkdir -p pasa_data
 
-      - name: Download last 2 MTPASA ZIPs using wget
+      - name: Download last 2 MTPASA ZIPs from manifest
         run: |
-          curl -s https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/ | \
+          curl -s https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/ | \
           grep -oE 'PUBLIC_MTPASADUIDAVAILABILITY_[^"<>]*?\.zip' | \
           sort | tail -n 2 | while read f; do
             echo "Downloading $f"
             wget -q "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/$f" -O "pasa_data/$f"
           done
+
+      - name: List downloaded files
+        run: ls -lh pasa_data
 
       - name: Run PASA monitor
         run: python monitor_pasa.py
