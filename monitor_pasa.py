@@ -25,7 +25,8 @@ def log(msg):
 
 
 def list_files():
-    r = requests.get(MTPASA_URL)
+    log("Fetching file list from NEMWeb...")
+    r = requests.get(MTPASA_URL, timeout=30)
     soup = BeautifulSoup(r.text, "html.parser")
     files = [
         (a.text, MTPASA_URL + a['href'])
@@ -44,10 +45,12 @@ def is_valid_zip(url):
 
 
 def extract_csv_from_zip(url):
-    r = requests.get(url)
+    log(f"Downloading ZIP: {url}")
+    r = requests.get(url, timeout=60)
     with zipfile.ZipFile(BytesIO(r.content)) as z:
         for filename in z.namelist():
             if filename.endswith(".csv"):
+                log(f"Extracting CSV: {filename}")
                 return pd.read_csv(z.open(filename))
     return pd.DataFrame()
 
@@ -78,6 +81,7 @@ def format_summary(changes):
 
 
 def send_ntfy(summary):
+    log("Sending alert via ntfy...")
     requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=summary.encode("utf-8"))
 
 
