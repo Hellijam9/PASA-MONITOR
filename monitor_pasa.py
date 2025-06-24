@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-Reads two most recent local ZIPs (already downloaded via wget)
-and pushes availability changes by DUID to ntfy.sh/pasa-alerts
+Fetches the last 2 MTPASA DUIDAvailability ZIPs from manifest.xml,
+compares availability by DUID, and pushes a summary to ntfy.sh/pasa-alerts
 """
 import os
 import zipfile
+import requests
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
+from bs4 import BeautifulSoup
 import signal
 import sys
 
 NTFY_TOPIC = "pasa-alerts"
-ZIP_DIR = "pasa_data"
+MTPASA_MANIFEST = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/manifest.xml"
+MTPASA_BASE = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
 MAX_RUNTIME_SECONDS = 180
 
 
@@ -31,15 +34,24 @@ signal.alarm(MAX_RUNTIME_SECONDS)
 
 def send_ntfy(summary):
     try:
-        import requests
         requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=summary.encode("utf-8"), timeout=10)
     except Exception as e:
         log(f"Failed to send ntfy alert: {e}")
 
 
-def extract_csv_from_zipfile(path):
-    log(f"Reading ZIP: {path}")
-    with zipfile.ZipFile(path, 'r') as z:
+def get_last_two_zip_urls():
+    log("Fetching ZIP list from manifest.xml...")
+    r = requests.get(MTPASA_MANIFEST, timeout=20)
+    soup = BeautifulSoup(r.text, "xml")
+    files = [node.text for node in soup.find_all("FileName") if node.text.endswith(".zip")]
+    files = sorted(files)[-2:]
+    return [MTPASA_BASE + f for f in files]
+
+
+def extract_csv_from_url(url):
+    log(f"Downloading ZIP: {url}")
+    r = requests.get(url, timeout=60)
+    with zipfile.ZipFile(BytesIO(r.content)) as z:
         for filename in z.namelist():
             if filename.endswith(".csv"):
                 log(f"Extracting: {filename}")
@@ -71,21 +83,18 @@ def format_summary(changes):
 
 
 if __name__ == "__main__":
-    log("Starting local ZIP comparison")
-    files = sorted([
-        os.path.join(ZIP_DIR, f)
-        for f in os.listdir(ZIP_DIR)
-        if f.endswith(".zip")
-    ])
-
-    if len(files) < 2:
-        log("❌ Not enough ZIP files in pasa_data/")
-        send_ntfy("⚠️ Not enough local MTPASA ZIPs to compare.")
+    log("Starting PASA Monitor from manifest")
+    try:
+        urls = get_last_two_zip_urls()
+        if len(urls) < 2:
+            raise Exception("Not enough ZIPs found in manifest")
+    except Exception as e:
+        log(f"❌ Failed to retrieve files: {e}")
+        send_ntfy(f"⚠️ Failed to load MTPASA manifest: {e}")
         sys.exit(1)
 
-    file1, file2 = files[-2:]
-    df1 = extract_csv_from_zipfile(file1)
-    df2 = extract_csv_from_zipfile(file2)
+    df1 = extract_csv_from_url(urls[0])
+    df2 = extract_csv_from_url(urls[1])
     changes = compare_availability(df1, df2)
 
     if changes.empty:
