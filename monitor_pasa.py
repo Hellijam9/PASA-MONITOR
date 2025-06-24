@@ -42,7 +42,7 @@ def send_ntfy(summary):
 def get_last_two_zip_urls():
     log("Fetching ZIP list from manifest.xml...")
     r = requests.get(MTPASA_MANIFEST, timeout=20)
-    soup = BeautifulSoup(r.text, "xml")
+    soup = BeautifulSoup(r.text, "lxml-xml")
     files = [node.text for node in soup.find_all("FileName") if node.text.endswith(".zip")]
     files = sorted(files)[-2:]
     return [MTPASA_BASE + f for f in files]
