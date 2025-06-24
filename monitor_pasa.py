@@ -14,14 +14,27 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from bs4 import BeautifulSoup
 import pytz
+import signal
+import sys
 
 NTFY_TOPIC = "pasa-alerts"
 MTPASA_URL = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
 TIMEZONE = pytz.timezone("Australia/Sydney")
+MAX_RUNTIME_SECONDS = 180  # kill script if it runs longer than 3 minutes
 
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+def timeout_handler(signum, frame):
+    log("⏱️ Timeout exceeded. Aborting.")
+    send_ntfy("⚠️ PASA Monitor timed out after 3 minutes.")
+    sys.exit(1)
+
+
+signal.signal(signal.SIGALRM, timeout_handler)
+signal.alarm(MAX_RUNTIME_SECONDS)
 
 
 def list_files():
@@ -82,7 +95,10 @@ def format_summary(changes):
 
 def send_ntfy(summary):
     log("Sending alert via ntfy...")
-    requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=summary.encode("utf-8"))
+    try:
+        requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=summary.encode("utf-8"), timeout=10)
+    except Exception as e:
+        log(f"Failed to send ntfy alert: {e}")
 
 
 if __name__ == "__main__":
@@ -107,3 +123,5 @@ if __name__ == "__main__":
         summary = format_summary(changes)
         send_ntfy(summary)
         log("Alert sent.")
+
+signal.alarm(0)  # Cancel alarm on success
