@@ -27,11 +27,20 @@ def log(msg):
 def list_files():
     r = requests.get(MTPASA_URL)
     soup = BeautifulSoup(r.text, "html.parser")
-    return sorted([
+    files = [
         (a.text, MTPASA_URL + a['href'])
         for a in soup.find_all('a')
         if a.text.endswith(".zip") and "PUBLIC" in a.text
-    ], reverse=True)
+    ]
+    return sorted(files)
+
+
+def is_valid_zip(url):
+    try:
+        head = requests.head(url, timeout=10)
+        return 'zip' in head.headers.get('Content-Type', '')
+    except Exception:
+        return False
 
 
 def extract_csv_from_zip(url):
@@ -74,13 +83,15 @@ def send_ntfy(summary):
 
 if __name__ == "__main__":
     log("Fetching file list...")
-    files = list_files()
-    if len(files) < 2:
-        log("Not enough files to compare.")
+    all_files = list_files()
+
+    valid_files = [(name, url) for name, url in reversed(all_files) if is_valid_zip(url)]
+    if len(valid_files) < 2:
+        log("Not enough valid files to compare.")
         exit(1)
 
-    (name1, url1), (name2, url2) = files[:2]
-    log(f"Comparing {name2} to {name1}")
+    (name1, url1), (name2, url2) = valid_files[-2:]  # older → newer
+    log(f"Comparing {name1} to {name2}")
 
     df1 = extract_csv_from_zip(url1)
     df2 = extract_csv_from_zip(url2)
