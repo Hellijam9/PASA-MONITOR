@@ -12,6 +12,7 @@ from io import BytesIO
 from bs4 import BeautifulSoup
 import signal
 import sys
+import time
 
 NTFY_TOPIC = "pasa-alerts"
 MTPASA_MANIFEST = "https://nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/manifest.xml"
@@ -49,14 +50,21 @@ def get_last_two_zip_urls():
 
 
 def extract_csv_from_url(url):
-    log(f"Downloading ZIP: {url}")
-    r = requests.get(url, timeout=60)
-    with zipfile.ZipFile(BytesIO(r.content)) as z:
-        for filename in z.namelist():
-            if filename.endswith(".csv"):
-                log(f"Extracting: {filename}")
-                return pd.read_csv(z.open(filename))
-    return pd.DataFrame()
+    for attempt in range(1, 4):
+        try:
+            log(f"Attempt {attempt} downloading ZIP: {url}")
+            r = requests.get(url, timeout=30)
+            with zipfile.ZipFile(BytesIO(r.content)) as z:
+                for filename in z.namelist():
+                    if filename.endswith(".csv"):
+                        log(f"Extracting: {filename}")
+                        return pd.read_csv(z.open(filename))
+        except Exception as e:
+            log(f"Attempt {attempt} failed: {e}")
+            time.sleep(2)
+
+    send_ntfy(f"❌ Failed to download ZIP after 3 attempts: {url.split('/')[-1]}")
+    sys.exit(1)
 
 
 def compare_availability(df1, df2):
