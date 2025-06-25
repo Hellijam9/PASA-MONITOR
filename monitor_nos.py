@@ -13,7 +13,10 @@ NTFY_URL = "https://ntfy.sh/pasa-alerts"
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
-    matches = set(re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text))
+
+    # Search the HTML for filenames that match the correct pattern
+    matches = re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text)
+
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -23,6 +26,7 @@ def fetch_latest_two_urls():
 
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
     return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
+
 
 def extract_csv(url):
     print(f"Downloading: {url}")
