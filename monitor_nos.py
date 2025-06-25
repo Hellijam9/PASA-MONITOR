@@ -10,11 +10,11 @@ import sys
 BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
 NTFY_URL = "https://ntfy.sh/pasa-alerts"
 
-
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
-    matches = set(re.findall(r'PUBLIC_AEMO_NETWORK_OUTAGE_\\d{12}_\\d+\\.zip', r.text))
+    # ✅ Corrected regex pattern
+    matches = set(re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text))
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -25,7 +25,6 @@ def fetch_latest_two_urls():
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
     return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
 
-
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
@@ -35,10 +34,6 @@ def extract_csv(url):
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
             lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
-            columns = [
-                "OUTAGEID", "SUBSTATIONID", "EQUIPMENTTYPE", "EQUIPMENTID",
-                "STARTTIME", "ENDTIME", "OUTAGESTATUSCODE", "LASTCHANGED", "ELEMENTID"
-            ]
             data = []
             for line in lines:
                 tokens = re.split(r'\s{2,}', line[1:].strip())
@@ -59,7 +54,6 @@ def extract_csv(url):
                     except Exception:
                         continue
             return pd.DataFrame(data)
-
 
 def compare_outages(df_old, df_new):
     old_ids = set(df_old["OUTAGEID"])
@@ -111,8 +105,6 @@ def compare_outages(df_old, df_new):
     print("\n" + full_message)
     requests.post(NTFY_URL, data=full_message.encode("utf-8"))
 
-
-
 def run_scheduler(test_mode=False):
     if test_mode:
         print("🧪 Running in TEST mode – simulating now.")
@@ -128,7 +120,6 @@ def run_scheduler(test_mode=False):
         compare_outages(df_old, df_new)
     except Exception as e:
         print(f"❌ ERROR: {e}")
-
 
 if __name__ == "__main__":
     test_mode = "--test" in sys.argv
