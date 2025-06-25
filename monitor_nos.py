@@ -15,7 +15,7 @@ def fetch_latest_two_urls():
     r.raise_for_status()
 
     # Search the HTML for filenames that match the correct pattern
-    matches = re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text)
+    matches = re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)
 
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
