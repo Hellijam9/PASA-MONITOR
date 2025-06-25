@@ -13,7 +13,7 @@ NTFY_URL = "https://ntfy.sh/pasa-alerts"
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
-    matches = set(re.findall(r'PUBLIC_MTPASADUIDAVAILABILITY_\d{12}_\d+\.zip', r.text))
+    matches = set(re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text))
     if len(matches) < 2:
         raise ValueError("❌ Not enough unique MTPASA ZIP files found.")
     def extract_dt(filename):
