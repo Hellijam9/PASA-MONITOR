@@ -74,30 +74,43 @@ def compare_outages(df_old, df_new):
         message_lines.append("No new or cleared network outages detected.")
     else:
         if not added.empty:
-            message_lines.append("🟥 New Outages:")
-            for _, row in added.iterrows():
-                start = pd.to_datetime(row["STARTTIME"])
-                end = pd.to_datetime(row["ENDTIME"])
-                duration = (end - start).days + 1
-                label = ("1 day" if duration == 1 else f"{duration} days")
-                quarter = (start.month - 1) // 3 + 1
-                qtr = f"Q{quarter} {start.year}"
-                message_lines.append(f"  {row['SUBSTATIONID']} {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({label}, {qtr})")
+            subs = added["SUBSTATIONID"].nunique()
+            message_lines.append(f"🟥 {len(added)} new outages across {subs} substations:")
+            for sub, group in added.groupby("SUBSTATIONID"):
+                message_lines.append(f"\n{sub}:")
+                for _, row in group.iterrows():
+                    start = pd.to_datetime(row["STARTTIME"])
+                    end = pd.to_datetime(row["ENDTIME"])
+                    reason = row.get("REASON", "").strip()
+                    duration = (end - start).days + 1
+                    label = "1 day" if duration == 1 else f"{duration} days"
+                    quarter = (start.month - 1) // 3 + 1
+                    qtr_str = f"Q{quarter} {start.year}"
+                    message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({label}, {qtr_str})")
+                    if reason:
+                        message_lines.append(f"    Reason: {reason}")
 
         if not removed.empty:
-            message_lines.append("\n🟩 Cleared Outages:")
-            for _, row in removed.iterrows():
-                start = pd.to_datetime(row["STARTTIME"])
-                end = pd.to_datetime(row["ENDTIME"])
-                duration = (end - start).days + 1
-                label = ("1 day" if duration == 1 else f"{duration} days")
-                quarter = (start.month - 1) // 3 + 1
-                qtr = f"Q{quarter} {start.year}"
-                message_lines.append(f"  {row['SUBSTATIONID']} {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({label}, {qtr})")
+            subs = removed["SUBSTATIONID"].nunique()
+            message_lines.append(f"\n🟩 {len(removed)} cleared outages across {subs} substations:")
+            for sub, group in removed.groupby("SUBSTATIONID"):
+                message_lines.append(f"\n{sub}:")
+                for _, row in group.iterrows():
+                    start = pd.to_datetime(row["STARTTIME"])
+                    end = pd.to_datetime(row["ENDTIME"])
+                    reason = row.get("REASON", "").strip()
+                    duration = (end - start).days + 1
+                    label = "1 day" if duration == 1 else f"{duration} days"
+                    quarter = (start.month - 1) // 3 + 1
+                    qtr_str = f"Q{quarter} {start.year}"
+                    message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({label}, {qtr_str})")
+                    if reason:
+                        message_lines.append(f"    Reason: {reason}")
 
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
     requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+
 
 
 def run_scheduler(test_mode=False):
