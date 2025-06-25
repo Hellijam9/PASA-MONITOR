@@ -64,24 +64,50 @@ def compare_availability(df_old, df_new):
     merged["CHANGE"] = merged["AVAIL_NEW"] - merged["AVAIL_OLD"]
     changes = merged[merged["CHANGE"] != 0]
 
+    # Load DUID info
+    try:
+        duid_info = pd.read_csv("duid_info.csv")
+        info_map = duid_info.set_index("DUID")[["REGION", "UNIT_NAME"]].to_dict("index")
+    except Exception as e:
+        print(f"⚠️ Could not load duid_info.csv: {e}")
+        info_map = {}
+
     message_lines = []
 
     if changes.empty:
         message_lines.append("No DUID availability changes detected.")
     else:
-        message_lines.append("🔄 Changes in Availability by DUID:")
+        message_lines.append("🔄 Changes in Availability by DUID (≥100 MW):")
         for duid, group in changes.groupby("DUID"):
             grouped_ranges = group_consecutive_changes(group)
-            message_lines.append(f"\n{duid}:")
+            region = info_map.get(duid, {}).get("REGION", "UNKNOWN")
+            name = info_map.get(duid, {}).get("UNIT_NAME", duid)
+            printed_header = False
             for start, end, change in grouped_ranges:
-                if start == end:
-                    message_lines.append(f"  {start.date()}: {change:+} MW")
+                if abs(change) < 100:
+                    continue
+                if not printed_header:
+                    message_lines.append(f"\n{name} ({duid}, {region}):")
+                    printed_header = True
+                duration = (end - start).days + 1
+                if duration == 1:
+                    label = "1 day"
+                elif duration < 7:
+                    label = f"{duration} days"
+                elif duration < 30:
+                    label = f"{duration // 7} week(s)"
                 else:
-                    message_lines.append(f"  {start.date()} to {end.date()}: {change:+} MW")
+                    label = f"{duration // 30} month(s)"
+                quarter = (start.month - 1) // 3 + 1
+                qtr_str = f"Q{quarter} {start.year}"
+                message_lines.append(
+                    f"  {start.date()} to {end.date()} ({label}, {qtr_str}): {change:+} MW"
+                )
 
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
     requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+
 
 def run_scheduler(test_mode=False):
     if test_mode:
