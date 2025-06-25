@@ -36,23 +36,29 @@ def extract_csv(url):
         file_name = z.namelist()[0]
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
+            # Read only lines starting with 'D'
             lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
-            data = []
-            for line in lines:
-                tokens = re.split(r'\s{2,}', line[1:].strip())
-                if len(tokens) >= 9:
-                    data.append({
-                        "OUTAGEID": tokens[0],
-                        "SUBSTATIONID": tokens[1],
-                        "EQUIPMENTTYPE": tokens[2],
-                        "EQUIPMENTID": tokens[3],
-                        "STARTTIME": tokens[4],
-                        "ENDTIME": tokens[5],
-                        "OUTAGESTATUSCODE": tokens[6],
-                        "LASTCHANGED": tokens[7],
-                        "ELEMENTID": tokens[8],
-                    })
-            return pd.DataFrame(data)
+            if not lines:
+                raise ValueError("❌ No data lines found starting with 'D'.")
+
+            # Use pandas fixed-width reader
+            from io import StringIO
+            df = pd.read_fwf(StringIO("".join(lines)), widths=[
+                1,  # D marker
+                15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 30, 5, 20, 20, 20, 20
+            ], header=None)
+
+            # Apply correct column names from row 2 in your screenshot
+            df.columns = [
+                "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
+                "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
+                "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
+                "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
+                "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
+            ][:df.shape[1]]  # truncate if fewer columns
+
+            return df
+
 
 def compare_outages(df_old, df_new):
     old_ids = set(df_old["OUTAGEID"])
