@@ -13,8 +13,7 @@ NTFY_URL = "https://ntfy.sh/pasa-alerts"
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
-    # ✅ Corrected regex pattern
-    matches = set(re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text))
+    matches = set(re.findall(r'PUBLIC_NETWORK_\d{12}_\d+\.zip', r.text))  # FIXED
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -23,7 +22,7 @@ def fetch_latest_two_urls():
         return datetime.strptime(match.group(1), "%Y%m%d%H%M") if match else datetime.min
 
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
-    return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
+    return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]  # OLD, then NEW
 
 def extract_csv(url):
     print(f"Downloading: {url}")
@@ -38,27 +37,22 @@ def extract_csv(url):
             for line in lines:
                 tokens = re.split(r'\s{2,}', line[1:].strip())
                 if len(tokens) >= 9:
-                    try:
-                        row = {
-                            "OUTAGEID": tokens[0],
-                            "SUBSTATIONID": tokens[1],
-                            "EQUIPMENTTYPE": tokens[2],
-                            "EQUIPMENTID": tokens[3],
-                            "STARTTIME": tokens[4],
-                            "ENDTIME": tokens[5],
-                            "OUTAGESTATUSCODE": tokens[6],
-                            "LASTCHANGED": tokens[7],
-                            "ELEMENTID": tokens[8]
-                        }
-                        data.append(row)
-                    except Exception:
-                        continue
+                    data.append({
+                        "OUTAGEID": tokens[0],
+                        "SUBSTATIONID": tokens[1],
+                        "EQUIPMENTTYPE": tokens[2],
+                        "EQUIPMENTID": tokens[3],
+                        "STARTTIME": tokens[4],
+                        "ENDTIME": tokens[5],
+                        "OUTAGESTATUSCODE": tokens[6],
+                        "LASTCHANGED": tokens[7],
+                        "ELEMENTID": tokens[8],
+                    })
             return pd.DataFrame(data)
 
 def compare_outages(df_old, df_new):
     old_ids = set(df_old["OUTAGEID"])
     new_ids = set(df_new["OUTAGEID"])
-
     added = df_new[df_new["OUTAGEID"].isin(new_ids - old_ids)]
     removed = df_old[df_old["OUTAGEID"].isin(old_ids - new_ids)]
 
@@ -75,14 +69,11 @@ def compare_outages(df_old, df_new):
                 for _, row in group.iterrows():
                     start = pd.to_datetime(row["STARTTIME"])
                     end = pd.to_datetime(row["ENDTIME"])
-                    reason = row.get("REASON", "").strip()
                     duration = (end - start).days + 1
                     label = "1 day" if duration == 1 else f"{duration} days"
-                    quarter = (start.month - 1) // 3 + 1
-                    qtr_str = f"Q{quarter} {start.year}"
+                    qtr = (start.month - 1) // 3 + 1
+                    qtr_str = f"Q{qtr} {start.year}"
                     message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({label}, {qtr_str})")
-                    if reason:
-                        message_lines.append(f"    Reason: {reason}")
 
         if not removed.empty:
             subs = removed["SUBSTATIONID"].nunique()
@@ -92,14 +83,11 @@ def compare_outages(df_old, df_new):
                 for _, row in group.iterrows():
                     start = pd.to_datetime(row["STARTTIME"])
                     end = pd.to_datetime(row["ENDTIME"])
-                    reason = row.get("REASON", "").strip()
                     duration = (end - start).days + 1
                     label = "1 day" if duration == 1 else f"{duration} days"
-                    quarter = (start.month - 1) // 3 + 1
-                    qtr_str = f"Q{quarter} {start.year}"
+                    qtr = (start.month - 1) // 3 + 1
+                    qtr_str = f"Q{qtr} {start.year}"
                     message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({label}, {qtr_str})")
-                    if reason:
-                        message_lines.append(f"    Reason: {reason}")
 
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
