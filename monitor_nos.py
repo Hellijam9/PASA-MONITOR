@@ -7,7 +7,7 @@ from datetime import datetime
 import pytz
 import sys
 
-BASE_URL = "https://www.nemweb.com.au/Reports/Current/OutageSchedule/"
+BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
 NTFY_URL = "https://ntfy.sh/pasa-alerts"
 
 
