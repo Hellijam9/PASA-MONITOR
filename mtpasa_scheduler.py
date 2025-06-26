@@ -84,7 +84,9 @@ def compare_availability(df_old, df_new):
     # Load Owner/Capacity/Units from duid_owner_units_capacity.csv
     try:
         duid_meta = pd.read_csv("duid_owner_units_capacity.csv")
+        duid_meta["DUID"] = duid_meta["DUID"].str.strip().str.upper()
         meta_map = duid_meta.set_index("DUID")[["Owner", "Number of Units", "Nameplate Capacity (MW)"]].to_dict("index")
+
     except Exception as e:
         print(f"⚠️ Could not load duid_owner_units_capacity.csv: {e}")
         meta_map = {}
