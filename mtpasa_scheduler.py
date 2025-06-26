@@ -71,25 +71,13 @@ def compare_availability(df_old, df_new):
     merged["CHANGE"] = merged["AVAIL_NEW"] - merged["AVAIL_OLD"]
     changes = merged[merged["CHANGE"] != 0]
 
-    # Load UNIT_NAME from duid_info.csv (leave this as-is)
+    # Load DUID info
     try:
         duid_info = pd.read_csv("duid_info.csv")
-        unit_name_map = duid_info.set_index("DUID")["UNIT_NAME"].to_dict()
-        region_map = duid_info.set_index("DUID")["REGION"].to_dict()
+        info_map = duid_info.set_index("DUID")[["REGION", "UNIT_NAME"]].to_dict("index")
     except Exception as e:
         print(f"⚠️ Could not load duid_info.csv: {e}")
-        unit_name_map = {}
-        region_map = {}
-
-    # Load Owner/Capacity/Units from duid_owner_units_capacity.csv
-    try:
-        duid_meta = pd.read_csv("duid_owner_units_capacity.csv")
-        duid_meta["DUID"] = duid_meta["DUID"].str.strip().str.upper()
-        meta_map = duid_meta.set_index("DUID")[["Owner", "Number of Units", "Nameplate Capacity (MW)"]].to_dict("index")
-
-    except Exception as e:
-        print(f"⚠️ Could not load duid_owner_units_capacity.csv: {e}")
-        meta_map = {}
+        info_map = {}
 
     message_lines = []
 
@@ -99,25 +87,15 @@ def compare_availability(df_old, df_new):
         message_lines.append("🔄 Changes in Availability by DUID (≥100 MW):")
         for duid, group in changes.groupby("DUID"):
             grouped_ranges = group_consecutive_changes(group)
-
-            name = unit_name_map.get(duid, duid)
-            region = region_map.get(duid, "UNKNOWN")
-
-            meta = meta_map.get(duid, {})
-            owner = meta.get("Owner", "UNKNOWN")
-            capacity = meta.get("Nameplate Capacity (MW)", "UNKNOWN")
-            units = meta.get("Number of Units", "UNKNOWN")
-
-            printed = False
+            region = info_map.get(duid, {}).get("REGION", "UNKNOWN")
+            name = info_map.get(duid, {}).get("UNIT_NAME", duid)
+            printed_header = False
             for start, end, change in grouped_ranges:
                 if abs(change) < 100:
                     continue
-                arrow = "🔺" if change > 0 else "🔻"
-                if not printed:
-                    message_lines.append(
-                        f"{arrow} {duid} ({name}, {owner}, {region}): {change:+} MW, full capacity is {capacity} MW, station has {units} units"
-                    )
-                    printed = True
+                if not printed_header:
+                    message_lines.append(f"\n{name} ({duid}, {region}):")
+                    printed_header = True
                 duration = (end - start).days + 1
                 if duration == 1:
                     label = "1 day"
@@ -130,13 +108,12 @@ def compare_availability(df_old, df_new):
                 quarter = (start.month - 1) // 3 + 1
                 qtr_str = f"Q{quarter} {start.year}"
                 message_lines.append(
-                    f"  {start.date()} to {end.date()} ({label}, {qtr_str})"
+                    f"  {start.date()} to {end.date()} ({label}, {qtr_str}): {change:+} MW"
                 )
 
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
     requests.post(NTFY_URL, data=full_message.encode("utf-8"))
-
 
 
 def run_scheduler(test_mode=False):
