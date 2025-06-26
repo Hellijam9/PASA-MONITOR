@@ -54,6 +54,15 @@ def extract_csv(url):
             ][:df.shape[1]]
             return df
 
+def find_col(columns, region, keyword):
+    region_norm = region.lower().replace(" ", "")
+    keyword_norm = keyword.lower().replace(" ", "")
+    for col in columns:
+        col_norm = col.lower().replace(" ", "")
+        if region_norm in col_norm and keyword_norm in col_norm:
+            return col
+    return None
+
 def process_neo_csvs():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
     messages = ["\n📘 NeoPoint Planned Outages by Region:"]
@@ -61,16 +70,21 @@ def process_neo_csvs():
         try:
             df = pd.read_csv(url.format(today=today))
             if df.empty:
+                messages.append(f"  ❌ Empty data for {region}")
                 continue
             
-            # Detect columns dynamically based on region prefix
-            substation_col = next((col for col in df.columns if region in col and 'substationid' in col.lower()), None)
-            equipment_type_col = next((col for col in df.columns if region in col and 'equipmenttype' in col.lower()), None)
-            equipment_id_col = next((col for col in df.columns if region in col and 'equipmentid' in col.lower()), None)
-            actual_start_col = next((col for col in df.columns if 'actual_starttime' in col.lower()), None)
-            actual_end_col = next((col for col in df.columns if 'actual_endtime' in col.lower()), None)
+            actual_start_col = next((col for col in df.columns if col.lower() == "actual_starttime"), None)
+            actual_end_col = next((col for col in df.columns if col.lower() == "actual_endtime"), None)
 
-            if not all([substation_col, equipment_type_col, equipment_id_col, actual_start_col, actual_end_col]):
+            if not actual_start_col or not actual_end_col:
+                messages.append(f"  ❌ Missing actual_starttime or actual_endtime for {region}")
+                continue
+
+            substation_col = find_col(df.columns, region, "substationid")
+            equipment_type_col = find_col(df.columns, region, "equipmenttype")
+            equipment_id_col = find_col(df.columns, region, "equipmentid")
+
+            if not substation_col or not equipment_type_col or not equipment_id_col:
                 messages.append(f"  ❌ Missing required columns for {region}")
                 continue
 
