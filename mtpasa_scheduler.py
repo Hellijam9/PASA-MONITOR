@@ -118,11 +118,11 @@ def compare_availability(df_old, df_new):
 
 def run_scheduler(test_mode=False):
     if test_mode:
-        print("🧪 Running in TEST mode – simulating now.")
+        print("Running in TEST mode – simulating now.")
     else:
         tz = pytz.timezone("Australia/Sydney")
         now = datetime.now(tz)
-        print(f"🕒 Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
     try:
         url_old, url_new = fetch_latest_two_urls()
