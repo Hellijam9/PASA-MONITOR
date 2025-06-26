@@ -56,19 +56,32 @@ def extract_csv(url):
 
 def process_neo_csvs():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    messages = ["\n[NeoPoint] Planned Outages by Region:"]
+    messages = ["\n📘 NeoPoint Planned Outages by Region:"]
     for region, url in NEO_CSV_LINKS.items():
         try:
             df = pd.read_csv(url.format(today=today))
-            if df.empty or "actual_starttime" not in df.columns:
+            if df.empty:
                 continue
-            df["actual_starttime"] = pd.to_datetime(df["actual_starttime"], errors="coerce")
-            df["actual_endtime"] = pd.to_datetime(df["actual_endtime"], errors="coerce")
-            messages.append(f"\n{region}:")
-            for sub, group in df.groupby(f"{region} substationid"):
+            
+            # Detect columns dynamically based on region prefix
+            substation_col = next((col for col in df.columns if region in col and 'substationid' in col.lower()), None)
+            equipment_type_col = next((col for col in df.columns if region in col and 'equipmenttype' in col.lower()), None)
+            equipment_id_col = next((col for col in df.columns if region in col and 'equipmentid' in col.lower()), None)
+            actual_start_col = next((col for col in df.columns if 'actual_starttime' in col.lower()), None)
+            actual_end_col = next((col for col in df.columns if 'actual_endtime' in col.lower()), None)
+
+            if not all([substation_col, equipment_type_col, equipment_id_col, actual_start_col, actual_end_col]):
+                messages.append(f"  ❌ Missing required columns for {region}")
+                continue
+
+            df[actual_start_col] = pd.to_datetime(df[actual_start_col], errors="coerce")
+            df[actual_end_col] = pd.to_datetime(df[actual_end_col], errors="coerce")
+
+            messages.append(f"\n🟦 {region}:")
+            for sub, group in df.groupby(substation_col):
                 messages.append(f"  {sub}:")
                 for _, row in group.iterrows():
-                    s, e = row["actual_starttime"], row["actual_endtime"]
+                    s, e = row[actual_start_col], row[actual_end_col]
                     if pd.isna(s) or pd.isna(e):
                         continue
                     duration = (e - s).days + 1
@@ -76,13 +89,11 @@ def process_neo_csvs():
                     months = round(duration / 30.44, 1)
                     years = round(duration / 365.25, 2)
                     qtr = (s.month - 1) // 3 + 1
-                    messages.append(
-                        f"    {row[f'{region} equipmenttype']} {row[f'{region} equipmentid']} → {s.date()} to {e.date()} "
-                        f"({duration}d, {weeks}w, {months}m, {years}y, Q{qtr} {s.year})"
-                    )
+                    messages.append(f"    {row[equipment_type_col]} {row[equipment_id_col]} → {s.date()} to {e.date()} ({duration}d, {weeks}w, {months}m, {years}y, Q{qtr} {s.year})")
         except Exception as e:
             messages.append(f"  ❌ Error loading {region}: {e}")
     return messages
+
 
 def compare_outages(df_old, df_new):
     old_ids = set(df_old["OUTAGEID"])
