@@ -17,13 +17,12 @@ NEO_CSV_LINKS = {
     "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=SA1&section=-1&key=gfi2016"
 }
 
-
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
     matches = re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)
     if len(matches) < 2:
-        raise ValueError("\u274c Not enough NOS ZIP files found.")
+        raise ValueError("❌ Not enough NOS ZIP files found.")
 
     def extract_dt(filename):
         match = re.search(r'_(\d{12})_', filename)
@@ -32,18 +31,17 @@ def fetch_latest_two_urls():
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
     return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
 
-
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
     r.raise_for_status()
     with zipfile.ZipFile(BytesIO(r.content)) as z:
         file_name = z.namelist()[0]
-        print(f"\u2705 Extracting: {file_name}")
+        print(f"Extracting: {file_name}")
         with z.open(file_name) as f:
             lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
             if not lines:
-                raise ValueError("\u274c No data lines found starting with 'D'.")
+                raise ValueError("❌ No data lines found starting with 'D'.")
             df = pd.read_fwf(StringIO("".join(lines)), widths=[
                 1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 30, 5, 20, 20, 20, 20
             ], header=None)
@@ -56,10 +54,9 @@ def extract_csv(url):
             ][:df.shape[1]]
             return df
 
-
 def process_neo_csvs():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    messages = ["\n📘 NeoPoint Planned Outages by Region:"]
+    messages = ["\n[NeoPoint] Planned Outages by Region:"]
     for region, url in NEO_CSV_LINKS.items():
         try:
             df = pd.read_csv(url.format(today=today))
@@ -67,7 +64,7 @@ def process_neo_csvs():
                 continue
             df["actual_starttime"] = pd.to_datetime(df["actual_starttime"], errors="coerce")
             df["actual_endtime"] = pd.to_datetime(df["actual_endtime"], errors="coerce")
-            messages.append(f"\n🟦 {region}:")
+            messages.append(f"\n{region}:")
             for sub, group in df.groupby(f"{region} substationid"):
                 messages.append(f"  {sub}:")
                 for _, row in group.iterrows():
@@ -79,11 +76,13 @@ def process_neo_csvs():
                     months = round(duration / 30.44, 1)
                     years = round(duration / 365.25, 2)
                     qtr = (s.month - 1) // 3 + 1
-                    messages.append(f"    {row[f'{region} equipmenttype']} {row[f'{region} equipmentid']} → {s.date()} to {e.date()} ({duration}d, {weeks}w, {months}m, {years}y, Q{qtr} {s.year})")
+                    messages.append(
+                        f"    {row[f'{region} equipmenttype']} {row[f'{region} equipmentid']} → {s.date()} to {e.date()} "
+                        f"({duration}d, {weeks}w, {months}m, {years}y, Q{qtr} {s.year})"
+                    )
         except Exception as e:
             messages.append(f"  ❌ Error loading {region}: {e}")
     return messages
-
 
 def compare_outages(df_old, df_new):
     old_ids = set(df_old["OUTAGEID"])
@@ -98,7 +97,7 @@ def compare_outages(df_old, df_new):
     else:
         if not added.empty:
             subs = added["SUBSTATIONID"].nunique()
-            message_lines.append(f"\ud83d\udd35 {len(added)} new outages across {subs} substations:")
+            message_lines.append(f"[NEW] {len(added)} new outages across {subs} substations:")
             for sub, group in added.groupby("SUBSTATIONID"):
                 message_lines.append(f"\n{sub}:")
                 for _, row in group.iterrows():
@@ -106,11 +105,14 @@ def compare_outages(df_old, df_new):
                     end = pd.to_datetime(row["ENDTIME"])
                     duration = (end - start).days + 1
                     qtr = (start.month - 1) // 3 + 1
-                    message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
+                    message_lines.append(
+                        f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} "
+                        f"({duration} days, Q{qtr} {start.year})"
+                    )
 
         if not removed.empty:
             subs = removed["SUBSTATIONID"].nunique()
-            message_lines.append(f"\n\ud83d\udfe9 {len(removed)} cleared outages across {subs} substations:")
+            message_lines.append(f"\n[CLEARED] {len(removed)} cleared outages across {subs} substations:")
             for sub, group in removed.groupby("SUBSTATIONID"):
                 message_lines.append(f"\n{sub}:")
                 for _, row in group.iterrows():
@@ -118,29 +120,30 @@ def compare_outages(df_old, df_new):
                     end = pd.to_datetime(row["ENDTIME"])
                     duration = (end - start).days + 1
                     qtr = (start.month - 1) // 3 + 1
-                    message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
+                    message_lines.append(
+                        f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} "
+                        f"({duration} days, Q{qtr} {start.year})"
+                    )
 
     message_lines += process_neo_csvs()
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
     requests.post(NTFY_URL, data=full_message.encode("utf-8"))
 
-
 def run_scheduler(test_mode=False):
     if test_mode:
-        print("\ud83e\uddea Running in TEST mode – simulating now.")
+        print("Running in TEST mode – simulating now.")
     else:
         tz = pytz.timezone("Australia/Sydney")
         now = datetime.now(tz)
-        print(f"\ud83d\udd52 Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
     try:
         url_old, url_new = fetch_latest_two_urls()
         df_old = extract_csv(url_old)
         df_new = extract_csv(url_new)
         compare_outages(df_old, df_new)
     except Exception as e:
-        print(f"\u274c ERROR: {e}")
-
+        print(f"❌ ERROR: {e}")
 
 if __name__ == "__main__":
     test_mode = "--test" in sys.argv
