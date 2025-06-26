@@ -1,3 +1,5 @@
+# This script detects availability changes in MTPASA DUIDs, ≥100 MW
+
 import requests
 import zipfile
 import pandas as pd
@@ -30,7 +32,8 @@ def extract_csv(url):
         file_name = z.namelist()[0]
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            return pd.read_csv(f, skiprows=1, low_memory=False)
+            df = pd.read_csv(f, skiprows=1, low_memory=False)
+            return df
 
 def group_consecutive_changes(group):
     output = []
@@ -63,7 +66,6 @@ def compare_availability(df_old, df_new):
     merged["CHANGE"] = merged["AVAIL_NEW"] - merged["AVAIL_OLD"]
     changes = merged[merged["CHANGE"] != 0]
 
-    # Load UNIT_NAME and REGION
     try:
         duid_info = pd.read_csv("duid_info.csv")
         unit_name_map = duid_info.set_index("DUID")["UNIT_NAME"].to_dict()
@@ -73,7 +75,6 @@ def compare_availability(df_old, df_new):
         unit_name_map = {}
         region_map = {}
 
-    # Load Owner, Units, Capacity
     try:
         duid_meta = pd.read_csv("duid_owner_units_capacity.csv")
         duid_meta["DUID"] = duid_meta["DUID"].astype(str).str.strip().str.upper()
@@ -136,3 +137,4 @@ def run_scheduler(test_mode=False):
 if __name__ == "__main__":
     test_mode = "--test" in sys.argv
     run_scheduler(test_mode=test_mode)
+
