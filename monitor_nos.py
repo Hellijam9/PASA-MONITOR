@@ -17,11 +17,12 @@ NEO_CSV_LINKS = {
     "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=SA1&section=-1&key=gfi2016"
 }
 
-
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
+
     matches = re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)
+
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -31,7 +32,6 @@ def fetch_latest_two_urls():
 
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
     return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
-
 
 def extract_csv(url):
     print(f"Downloading: {url}")
@@ -44,9 +44,11 @@ def extract_csv(url):
             lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
             if not lines:
                 raise ValueError("❌ No data lines found starting with 'D'.")
+
             df = pd.read_fwf(StringIO("".join(lines)), widths=[
                 1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 30, 5, 20, 20, 20, 20
             ], header=None)
+
             df.columns = [
                 "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
                 "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
@@ -54,51 +56,43 @@ def extract_csv(url):
                 "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
                 "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
             ][:df.shape[1]]
+
             return df
 
-
-def process_neo_csvs():
+def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    messages = ["\n📘 NeoPoint Planned Outages by Region:"]
-    # Indices based on exact CSV column order from your example
-    # 0: actual_starttime, 1: actual_endtime, 2: outageid, 3: regionid, 4: ownerid, 5: substationid,
-    # 6: substation_DESCRIPTION, 7: equipmenttype, 8: equipmentid, 9: equipment_DESCRIPTION
-    for region, url in NEO_CSV_LINKS.items():
-        try:
-            df = pd.read_csv(url.format(today=today))
-            required_cols = [0,1,5,7,8]  # Indices for needed columns
-            if df.empty or any(col >= len(df.columns) for col in required_cols):
-                messages.append(f"  ❌ Missing required columns for {region}")
-                continue
-            # Extract needed columns by index
-            s_times = pd.to_datetime(df.iloc[:,0], errors="coerce")
-            e_times = pd.to_datetime(df.iloc[:,1], errors="coerce")
-            substations = df.iloc[:,5]
-            equipment_types = df.iloc[:,7]
-            equipment_ids = df.iloc[:,8]
-            messages.append(f"\n🟦 {region}:")
-            grouped = df.groupby(substations)
-            for sub, group in grouped:
-                messages.append(f"  {sub}:")
-                for idx, row in group.iterrows():
-                    s = s_times[idx]
-                    e = e_times[idx]
-                    if pd.isna(s) or pd.isna(e):
-                        continue
-                    duration = (e - s).days + 1
-                    weeks = duration // 7
-                    months = round(duration / 30.44, 1)
-                    years = round(duration / 365.25, 2)
-                    qtr = (s.month - 1) // 3 + 1
-                    messages.append(f"    {equipment_types[idx]} {equipment_ids[idx]} → {s.date()} to {e.date()} ({duration}d, {weeks}w, {months}m, {years}y, Q{qtr} {s.year})")
-        except Exception as e:
-            messages.append(f"  ❌ Error loading {region}: {e}")
-    return messages
+    substation_to_state = {}
 
+    for state_code, url_template in NEO_CSV_LINKS.items():
+        url = url_template.format(today=today)
+        try:
+            df = pd.read_csv(url)
+
+            # Using column indexes (based on your CSVs)
+            # Assume:  substationid at col 6, state is from state_code key directly
+            # Just map substationid to state_code
+            # Defensive check for required column index
+            if df.shape[1] < 7:
+                print(f"⚠️ NeoPoint CSV for {state_code} missing expected columns, skipping")
+                continue
+
+            # Column index 6 is substationid based on your examples (0-based)
+            # Loop rows to build dict
+            for substation_id in df.iloc[:,6].dropna().unique():
+                substation_to_state[substation_id] = state_code
+
+        except Exception as e:
+            print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
+
+    return substation_to_state
 
 def compare_outages(df_old, df_new):
+    # Load mapping once
+    substation_to_state = load_neo_mapping()
+
     old_ids = set(df_old["OUTAGEID"])
     new_ids = set(df_new["OUTAGEID"])
+
     added = df_new[df_new["OUTAGEID"].isin(new_ids - old_ids)]
     removed = df_old[df_old["OUTAGEID"].isin(old_ids - new_ids)]
 
@@ -108,34 +102,35 @@ def compare_outages(df_old, df_new):
         message_lines.append("No new or cleared network outages detected.")
     else:
         if not added.empty:
-            subs = added["SUBSTATIONID"].nunique()
-            message_lines.append(f"🔵 {len(added)} new outages across {subs} substations:")
-            for sub, group in added.groupby("SUBSTATIONID"):
-                message_lines.append(f"\n{sub}:")
-                for _, row in group.iterrows():
-                    start = pd.to_datetime(row["STARTTIME"])
-                    end = pd.to_datetime(row["ENDTIME"])
-                    duration = (end - start).days + 1
-                    qtr = (start.month - 1) // 3 + 1
-                    message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
+            message_lines.append(f"🟥 {len(added)} new outages:")
+            # Group by state, then substation
+            for state, group_state in added.groupby(lambda r: substation_to_state.get(added.loc[r, "SUBSTATIONID"], "UNKNOWN")):
+                message_lines.append(f"\nState: {state}")
+                for substation, group_sub in group_state.groupby("SUBSTATIONID"):
+                    message_lines.append(f"  Substation: {substation}")
+                    for _, row in group_sub.iterrows():
+                        start = pd.to_datetime(row["STARTTIME"])
+                        end = pd.to_datetime(row["ENDTIME"])
+                        duration = (end - start).days + 1
+                        qtr = (start.month - 1) // 3 + 1
+                        message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
 
         if not removed.empty:
-            subs = removed["SUBSTATIONID"].nunique()
-            message_lines.append(f"\n🟩 {len(removed)} cleared outages across {subs} substations:")
-            for sub, group in removed.groupby("SUBSTATIONID"):
-                message_lines.append(f"\n{sub}:")
-                for _, row in group.iterrows():
-                    start = pd.to_datetime(row["STARTTIME"])
-                    end = pd.to_datetime(row["ENDTIME"])
-                    duration = (end - start).days + 1
-                    qtr = (start.month - 1) // 3 + 1
-                    message_lines.append(f"  {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
+            message_lines.append(f"\n🟩 {len(removed)} cleared outages:")
+            for state, group_state in removed.groupby(lambda r: substation_to_state.get(removed.loc[r, "SUBSTATIONID"], "UNKNOWN")):
+                message_lines.append(f"\nState: {state}")
+                for substation, group_sub in group_state.groupby("SUBSTATIONID"):
+                    message_lines.append(f"  Substation: {substation}")
+                    for _, row in group_sub.iterrows():
+                        start = pd.to_datetime(row["STARTTIME"])
+                        end = pd.to_datetime(row["ENDTIME"])
+                        duration = (end - start).days + 1
+                        qtr = (start.month - 1) // 3 + 1
+                        message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
 
-    message_lines += process_neo_csvs()
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
     requests.post(NTFY_URL, data=full_message.encode("utf-8"))
-
 
 def run_scheduler(test_mode=False):
     if test_mode:
@@ -143,7 +138,7 @@ def run_scheduler(test_mode=False):
     else:
         tz = pytz.timezone("Australia/Sydney")
         now = datetime.now(tz)
-        print(f"⏲ Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🕒 Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
     try:
         url_old, url_new = fetch_latest_two_urls()
         df_old = extract_csv(url_old)
@@ -151,7 +146,6 @@ def run_scheduler(test_mode=False):
         compare_outages(df_old, df_new)
     except Exception as e:
         print(f"❌ ERROR: {e}")
-
 
 if __name__ == "__main__":
     test_mode = "--test" in sys.argv
