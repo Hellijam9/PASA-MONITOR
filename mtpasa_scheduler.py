@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
 import requests
 import zipfile
 import pandas as pd
 import re
 from io import BytesIO
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import pytz
 import sys
 
@@ -104,13 +106,19 @@ def compare_availability(df_old, df_new):
             for start, end, change in grouped_ranges:
                 if abs(change) < 100:
                     continue
-                duration = (end - start).days + 1
-                label = (
-                    "1 day" if duration == 1 else
-                    f"{duration} days" if duration < 7 else
-                    f"{duration // 7} week" if duration < 30 else
-                    f"{duration // 30} month"
-                )
+
+                # ── replaced duration/label with relativedelta ──
+                rd = relativedelta(end, start)
+                parts = []
+                if rd.years:
+                    parts.append(f"{rd.years} year{'s' if rd.years>1 else ''}")
+                if rd.months:
+                    parts.append(f"{rd.months} month{'s' if rd.months>1 else ''}")
+                if rd.days:
+                    parts.append(f"{rd.days} day{'s' if rd.days>1 else ''}")
+                label = " ".join(parts) or "0 days"
+                # ── end replacement ──
+
                 qtr = f"Q{((start.month - 1) // 3) + 1} {start.year}"
                 message_lines.append(f"   ➤ {start.date()} to {end.date()} ({label}, {qtr}): {change:+} MW")
 
