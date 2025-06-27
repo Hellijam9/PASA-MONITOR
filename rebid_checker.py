@@ -12,10 +12,14 @@ NTFY_TOPIC   = "rebid-alerts"
 NTFY_URL     = f"https://ntfy.sh/{NTFY_TOPIC}"
 
 REDBID_URLS = {
-    "NSW1": "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation&from={today}%2000%3A00&period=Daily&instances=GEN%3BNSW1&section=-1&key=gfi2016",
-    "QLD1": "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation&from={today}%2000%3A00&period=Daily&instances=GEN%3BQLD1&section=-1&key=gfi2016",
-    "VIC1": "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation&from={today}%2000%3A00&period=Daily&instances=GEN%3BVIC1&section=-1&key=gfi2016",
-    "SA1":  "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation&from={today}%2000%3A00&period=Daily&instances=GEN%3BSA1&section=-1&key=gfi2016",
+    "NSW1": "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation"
+            "&from={today}%2000%3A00&period=Daily&instances=GEN%3BNSW1&section=-1&key=gfi2016",
+    "QLD1": "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation"
+            "&from={today}%2000%3A00&period=Daily&instances=GEN%3BQLD1&section=-1&key=gfi2016",
+    "VIC1": "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation"
+            "&from={today}%2000%3A00&period=Daily&instances=GEN%3BVIC1&section=-1&key=gfi2016",
+    "SA1":  "https://www.neopoint.com.au/Service/Csv?f=104%20Bids%20-%20Energy%5CRegion%20Rebids%20Explanation"
+            "&from={today}%2000%3A00&period=Daily&instances=GEN%3BSA1&section=-1&key=gfi2016",
 }
 
 INCLUDED_FUELS = {"black coal", "brown coal", "hydro", "gas"}
@@ -33,13 +37,14 @@ def load_mapping():
 
 def fetch_rebids(url):
     today = datetime.now().strftime("%Y-%m-%d")
-    text = requests.get(url.format(today=today)).text
-    df = pd.read_csv(StringIO(text))
+    resp = requests.get(url.format(today=today))
+    resp.raise_for_status()
+    df = pd.read_csv(StringIO(resp.text))
     df.columns = df.columns.str.upper().str.strip()
     return df
 
 def send_ntfy(msg):
-    print("🔔 Sending ntfy alert:\n", msg, "\n")
+    print("🔔 Sending ntfy alert:\n" + msg + "\n")
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
 
 # ── MAIN ──────────────────────────────────────────
@@ -49,42 +54,43 @@ def main():
         print("⚠️ No matching DUIDs—check your plant CSV.")
         return
 
-    seen = pd.read_csv(STATE_FILE) if os.path.exists(STATE_FILE) else pd.DataFrame(columns=["DUID","TIME","REGION"])
+    # load or initialize state
+    if os.path.exists(STATE_FILE):
+        seen = pd.read_csv(STATE_FILE)
+    else:
+        seen = pd.DataFrame(columns=["DUID","TIME","REGION"])
+
     all_new = []
 
     for region, url in REDBID_URLS.items():
-            # … inside your for region, url loop …
+        df = fetch_rebids(url)
 
-    df = fetch_rebids(url)
+        # 1) Literal DUID
+        if "DUID" not in df.columns:
+            print(f"❌ No DUID column in {region} CSV; got: {df.columns.tolist()}")
+            continue
 
-    # 1) DUID column is literally "DUID"
-    if "DUID" not in df.columns:
-        print(f"❌ No DUID column in {region} CSV; got: {df.columns.tolist()}")
-        continue
-    duid_col = "DUID"
+        # 2) Literal OFFERDATE as TIME
+        if "OFFERDATE" not in df.columns:
+            print(f"❌ 'OFFERDATE' missing in {region} CSV; got: {df.columns.tolist()}")
+            continue
 
-    # 2) TIME is "OFFERDATE"
-    if "OFFERDATE" not in df.columns:
-        print(f"❌ 'OFFERDATE' missing in {region} CSV; got: {df.columns.tolist()}")
-        continue
+        # 3) Literal REBIDEXPLANATION as REASON
+        if "REBIDEXPLANATION" not in df.columns:
+            print(f"❌ 'REBIDEXPLANATION' missing in {region} CSV; got: {df.columns.tolist()}")
+            continue
 
-    # 3) REASON is "REBIDEXPLANATION"
-    if "REBIDEXPLANATION" not in df.columns:
-        print(f"❌ 'REBIDEXPLANATION' missing in {region} CSV; got: {df.columns.tolist()}")
-        continue
+        # build subset & rename
+        sub = df[["DUID","OFFERDATE","REBIDEXPLANATION"]].rename(
+            columns={"OFFERDATE":"TIME","REBIDEXPLANATION":"REASON"}
+        )
+        sub["DUID"]   = sub["DUID"].astype(str).str.upper().str.strip()
+        sub["REGION"] = region
 
-    # Build the subset
-    sub = df[[duid_col, "OFFERDATE", "REBIDEXPLANATION"]].rename(
-        columns={"DUID": "DUID", "OFFERDATE": "TIME", "REBIDEXPLANATION": "REASON"}
-    )
-    sub["DUID"]   = sub["DUID"].astype(str).str.upper().str.strip()
-    sub["REGION"] = region
-
-
-        # Filter to your DUIDs
+        # filter to your fuel-type DUIDs
         sub = sub[sub["DUID"].isin(mapping["DUID"])]
 
-        # Diff against seen
+        # diff vs seen
         merged = sub.merge(seen, on=["DUID","TIME","REGION"], how="left", indicator=True)
         new    = merged[merged["_merge"]=="left_only"].drop(columns="_merge")
 
@@ -92,7 +98,7 @@ def main():
         if not new.empty:
             all_new.append((region, new))
 
-    # Send grouped alerts
+    # send alerts if any
     if all_new:
         lines = []
         for region, df_new in all_new:
@@ -106,7 +112,7 @@ def main():
     else:
         print("No new rebids detected.")
 
-    # Update state
+    # update state file
     updated = pd.concat([seen] + [n for _, n in all_new], ignore_index=True)
     updated.drop_duplicates(["DUID","TIME","REGION"], inplace=True)
     updated.to_csv(STATE_FILE, index=False)
