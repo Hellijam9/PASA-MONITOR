@@ -1,5 +1,9 @@
 name: Rebid Alerts
 
+# Grant this workflow write access to repo contents
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
 
@@ -11,7 +15,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
         with:
-          persist-credentials: true  # allows pushing back state
+          persist-credentials: true  # needed for pushing
 
       - name: Set up Python
         uses: actions/setup-python@v4
