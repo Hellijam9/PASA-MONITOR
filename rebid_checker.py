@@ -103,7 +103,7 @@ def main():
         lines = []
         for region, df_new in all_new:
             lines.append(f"📍 {region} — {len(df_new)} new rebid(s)")
-            enriched = df_new.merge(mapping, on="DUID", how="left")
+            enriched = df_new.merge(mapping, on="DUID", how="left", suffixes=('', '_old'))
             for company, grp in enriched.groupby("COMPANY"):
                 lines.append(f"\n🏢 {company}")
                 for _, r in grp.iterrows():
