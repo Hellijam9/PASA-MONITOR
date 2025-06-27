@@ -26,13 +26,25 @@ def fetch_latest_two_urls():
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
-    # Simple fix: Sort by full filename (latest last)
-    sorted_files = sorted(matches)
+    # Extract timestamp and sort by it
+    def extract_dt(filename):
+        match = re.search(r'PUBLIC_NETWORK_(\d{14})_', filename)
+        if match:
+            return datetime.strptime(match.group(1), "%Y%m%d%H%M%S")
+        return datetime.min
 
-    print("Selected files:")
-    print("Old:", sorted_files[-2])
-    print("New:", sorted_files[-1])
-    return BASE_URL + sorted_files[-2], BASE_URL + sorted_files[-1]
+    # Pair filenames with timestamps
+    files_with_times = [(extract_dt(f), f) for f in matches]
+    files_with_times.sort(reverse=True)  # newest first
+
+    # Print top 5 for confirmation
+    print("📂 Top 5 files sorted by timestamp:")
+    for ts, f in files_with_times[:5]:
+        print(f"  {ts}  →  {f}")
+
+    # Return latest and second-latest
+    return BASE_URL + files_with_times[1][1], BASE_URL + files_with_times[0][1]
+
 
 
 
