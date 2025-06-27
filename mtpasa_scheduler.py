@@ -1,10 +1,11 @@
-
+#!/usr/bin/env python3
 import requests
 import zipfile
 import pandas as pd
 import re
 from io import BytesIO
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import pytz
 import sys
 
@@ -18,122 +19,123 @@ def fetch_latest_two_urls():
     if len(matches) < 2:
         raise ValueError("❌ Not enough unique MTPASA ZIP files found.")
     def extract_dt(filename):
-        match = re.search(r'_(\d{12})_', filename)
-        return datetime.strptime(match.group(1), "%Y%m%d%H%M") if match else datetime.min
+        m = re.search(r'_(\d{12})_', filename)
+        return datetime.strptime(m.group(1), "%Y%m%d%H%M") if m else datetime.min
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
     return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
 
 def extract_csv(url):
     print(f"Downloading: {url}")
-    r = requests.get(url)
-    r.raise_for_status()
+    r = requests.get(url); r.raise_for_status()
     with zipfile.ZipFile(BytesIO(r.content)) as z:
-        file_name = z.namelist()[0]
-        print(f"✅ Extracting: {file_name}")
-        with z.open(file_name) as f:
+        fname = z.namelist()[0]
+        print(f"✅ Extracting: {fname}")
+        with z.open(fname) as f:
             return pd.read_csv(f, skiprows=1, low_memory=False)
 
-def group_consecutive_changes(group):
-    output = []
-    group = group.sort_values("DAY")
-    start_date = prev_date = prev_change = None
-    for _, row in group.iterrows():
-        cur_date = pd.to_datetime(row["DAY"])
-        cur_change = int(row["CHANGE"])
-        if start_date is None:
-            start_date = prev_date = cur_date
-            prev_change = cur_change
-            continue
-        if cur_date == prev_date + timedelta(days=1) and cur_change == prev_change:
-            prev_date = cur_date
-        else:
-            output.append((start_date, prev_date, prev_change))
-            start_date = prev_date = cur_date
-            prev_change = cur_change
-    if start_date is not None:
-        output.append((start_date, prev_date, prev_change))
-    return output
+def group_availability_ranges(df):
+    """Return dict DUID → list of (start, end, availability)."""
+    out = {}
+    for duid, grp in df.groupby("DUID"):
+        grp = grp.sort_values("DAY")
+        ranges = []
+        start = prev = None
+        prev_val = None
+        for _, row in grp.iterrows():
+            day = pd.to_datetime(row["DAY"])
+            val = int(row["PASAAVAILABILITY"])
+            if start is None:
+                start = prev = day
+                prev_val = val
+            elif day == prev + timedelta(days=1) and val == prev_val:
+                prev = day
+            else:
+                ranges.append((start, prev, prev_val))
+                start = prev = day
+                prev_val = val
+        if start is not None:
+            ranges.append((start, prev, prev_val))
+        out[duid] = ranges
+    return out
 
 def compare_availability(df_old, df_new):
-    cols = ["DUID", "DAY", "PASAAVAILABILITY"]
-    df_old = df_old[cols].copy()
-    df_new = df_new[cols].copy()
-    df_old.rename(columns={"PASAAVAILABILITY": "AVAIL_OLD"}, inplace=True)
-    df_new.rename(columns={"PASAAVAILABILITY": "AVAIL_NEW"}, inplace=True)
-    merged = pd.merge(df_old, df_new, on=["DUID", "DAY"])
-    merged["CHANGE"] = merged["AVAIL_NEW"] - merged["AVAIL_OLD"]
-    changes = merged[merged["CHANGE"] != 0]
-
-    # Load UNIT_NAME and REGION
+    # Load DUID metadata
     try:
-        duid_info = pd.read_csv("duid_info.csv")
-        unit_name_map = duid_info.set_index("DUID")["UNIT_NAME"].to_dict()
-        region_map = duid_info.set_index("DUID")["REGION"].to_dict()
-    except Exception as e:
-        print(f"⚠️ Could not load duid_info.csv: {e}")
-        unit_name_map = {}
-        region_map = {}
+        info = pd.read_csv("duid_info.csv")
+        name_map   = info.set_index("DUID")["UNIT_NAME"].to_dict()
+        region_map = info.set_index("DUID")["REGION"].to_dict()
+    except:
+        name_map = region_map = {}
 
-    # Load Owner, Units, Capacity
-    try:
-        duid_meta = pd.read_csv("duid_owner_units_capacity.csv")
-        duid_meta["DUID"] = duid_meta["DUID"].astype(str).str.strip().str.upper()
-        duid_meta = duid_meta[duid_meta["DUID"] != ""].drop_duplicates(subset="DUID")
-        meta_map = duid_meta.set_index("DUID")[["Owner", "Number of Units", "Nameplate Capacity (MW)"]].to_dict("index")
-    except Exception as e:
-        print(f"⚠️ Could not load duid_owner_units_capacity.csv: {e}")
-        meta_map = {}
+    msg_lines = []
 
-    message_lines = []
+    # 1) Numeric changes
+    old = df_old[["DUID","DAY","PASAAVAILABILITY"]].rename(columns={"PASAAVAILABILITY":"OLD"})
+    new = df_new[["DUID","DAY","PASAAVAILABILITY"]].rename(columns={"PASAAVAILABILITY":"NEW"})
+    merged = pd.merge(old, new, on=["DUID","DAY"])
+    merged["DELTA"] = merged["NEW"] - merged["OLD"]
+    numeric = merged[merged["DELTA"].abs() >= 100]
 
-    if changes.empty:
-        message_lines.append("No DUID availability changes detected.")
-    else:
-        message_lines.append("🔄 Changes in Availability by DUID (≥100 MW):")
-        for duid, group in changes.groupby("DUID"):
-            grouped_ranges = group_consecutive_changes(group)
-            if all(abs(change) < 100 for _, _, change in grouped_ranges):
-                continue
-            name = unit_name_map.get(duid, duid)
+    if not numeric.empty:
+        msg_lines.append("🔄 Availability changes (≥100 MW):")
+        for duid, grp in numeric.groupby("DUID"):
+            name   = name_map.get(duid, duid)
             region = region_map.get(duid, "UNKNOWN")
-            meta = meta_map.get(duid, {})
-            owner = meta.get("Owner", "UNKNOWN")
-            capacity = meta.get("Nameplate Capacity (MW)", "UNKNOWN")
-            units = meta.get("Number of Units", "UNKNOWN")
-            message_lines.append(f"\n🔺 {duid} | {name} | {owner} | {region}")
-            message_lines.append(f"   ➤ Full capacity: {capacity} MW | Units: {units}")
-            for start, end, change in grouped_ranges:
-                if abs(change) < 100:
-                    continue
-                duration = (end - start).days + 1
-                label = (
-                    "1 day" if duration == 1 else
-                    f"{duration} days" if duration < 7 else
-                    f"{duration // 7} week" if duration < 30 else
-                    f"{duration // 30} month"
-                )
-                qtr = f"Q{((start.month - 1) // 3) + 1} {start.year}"
-                message_lines.append(f"   ➤ {start.date()} to {end.date()} ({label}, {qtr}): {change:+} MW")
+            msg_lines.append(f"\n🔺 {duid} | {name} | {region}")
+            for _, row in grp.iterrows():
+                day   = row["DAY"]
+                delta = row["DELTA"]
+                msg_lines.append(f"   {day}: {delta:+} MW")
 
-    full_message = "\n".join(message_lines)
-    print("\n" + full_message)
-    requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+    # 2) Timing shifts
+    old_ranges = group_availability_ranges(df_old)
+    new_ranges = group_availability_ranges(df_new)
+
+    shifts = []
+    for duid in set(old_ranges) & set(new_ranges):
+        for o_start, o_end, val in old_ranges[duid]:
+            for n_start, n_end, v2 in new_ranges[duid]:
+                if val == v2 and (o_start != n_start or o_end != n_end):
+                    # compute months+days shift
+                    rd = relativedelta(n_start, o_start)
+                    months = rd.years*12 + rd.months
+                    days   = rd.days
+                    parts = []
+                    if months: parts.append(f"{months} month{'s' if months>1 else ''}")
+                    if days:   parts.append(f"{days} day{'s' if days>1 else ''}")
+                    span = " ".join(parts) or "0 days"
+
+                    # quarter labels
+                    q_old = f"Q{((o_start.month-1)//3)+1} {o_start.year}"
+                    q_new = f"Q{((n_start.month-1)//3)+1} {n_start.year}"
+                    transition = f"moved from {q_old} to {q_new}" if q_old!=q_new else f"stayed in {q_old}"
+
+                    name   = name_map.get(duid, duid)
+                    msg_lines.append(
+                        f"⏩ {duid} | {name}: outage of {val:+} MW shifted {span} "
+                        f"({o_start.date()}→{n_start.date()}) — {transition}"
+                    )
+    if not shifts and numeric.empty:
+        msg_lines.append("No changes detected.")
+
+    full = "\n".join(msg_lines)
+    print(full)
+    requests.post(NTFY_URL, data=full.encode("utf-8"))
 
 def run_scheduler(test_mode=False):
     if test_mode:
-        print("Running in TEST mode – simulating now.")
+        print("🧪 TEST MODE")
     else:
-        tz = pytz.timezone("Australia/Sydney")
-        now = datetime.now(tz)
-        print(f"Current AEST Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        now = datetime.now(pytz.timezone("Australia/Sydney"))
+        print(f"🕒 {now}")
+
     try:
-        url_old, url_new = fetch_latest_two_urls()
-        df_old = extract_csv(url_old)
-        df_new = extract_csv(url_new)
+        u_old, u_new = fetch_latest_two_urls()
+        df_old = extract_csv(u_old)
+        df_new = extract_csv(u_new)
         compare_availability(df_old, df_new)
     except Exception as e:
-        print(f"❌ ERROR: {e}")
+        print("❌ ERROR:", e)
 
-if __name__ == "__main__":
-    test_mode = "--test" in sys.argv
-    run_scheduler(test_mode=test_mode)
+if __name__=="__main__":
+    run_scheduler("--test" in sys.argv)
