@@ -26,13 +26,14 @@ def fetch_latest_two_urls():
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
-    # Sort by full filename instead of timestamp only
-    sorted_files = sorted(matches, reverse=True)
+    # Simple fix: Sort by full filename (latest last)
+    sorted_files = sorted(matches)
 
     print("Selected files:")
-    print("Old:", sorted_files[1])
-    print("New:", sorted_files[0])
-    return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
+    print("Old:", sorted_files[-2])
+    print("New:", sorted_files[-1])
+    return BASE_URL + sorted_files[-2], BASE_URL + sorted_files[-1]
+
 
 
 
