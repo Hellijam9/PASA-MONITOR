@@ -22,7 +22,12 @@ def fetch_pd(date_str):
     url = PD_CSV_URL.format(date=date_str)
     resp = requests.get(url)
     resp.raise_for_status()
-    df = pd.read_csv(StringIO(resp.text), parse_dates=["DateTime"])
+    # Read without parse_dates, then detect first column as datetime
+    df = pd.read_csv(StringIO(resp.text))
+    # Identify datetime column (first column)
+    dt_col = df.columns[0]
+    df[dt_col] = pd.to_datetime(df[dt_col])
+    df.rename(columns={dt_col: 'DateTime'}, inplace=True)
     df.columns = df.columns.str.strip()
     return df
 
