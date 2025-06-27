@@ -31,7 +31,11 @@ def fetch_latest_two_urls():
         return datetime.strptime(match.group(1), "%Y%m%d%H%M") if match else datetime.min
 
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
+    print("Selected files:")
+    print("Old:", sorted_files[1])
+    print("New:", sorted_files[0])
     return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
+
 
 def extract_csv(url):
     print(f"Downloading: {url}")
