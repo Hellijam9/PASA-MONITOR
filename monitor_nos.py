@@ -21,29 +21,27 @@ def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
 
-    matches = re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)
+    # Deduplicate file matches from HTML
+    matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
 
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
-    # Extract timestamp and sort by it
     def extract_dt(filename):
         match = re.search(r'PUBLIC_NETWORK_(\d{14})_', filename)
         if match:
             return datetime.strptime(match.group(1), "%Y%m%d%H%M%S")
         return datetime.min
 
-    # Pair filenames with timestamps
     files_with_times = [(extract_dt(f), f) for f in matches]
-    files_with_times.sort(reverse=True)  # newest first
+    files_with_times.sort(reverse=True)
 
-    # Print top 5 for confirmation
     print("📂 Top 5 files sorted by timestamp:")
     for ts, f in files_with_times[:5]:
         print(f"  {ts}  →  {f}")
 
-    # Return latest and second-latest
     return BASE_URL + files_with_times[1][1], BASE_URL + files_with_times[0][1]
+
 
 
 
