@@ -1,0 +1,25 @@
+name: Cap Payout Alert
+
+on:
+  workflow_dispatch:
+
+jobs:
+  calc-and-notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run cap payout script
+        run: python calc_cap_payout.py
