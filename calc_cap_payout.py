@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 from io import StringIO
 from datetime import datetime
+from urllib.parse import quote
 
 # ── CONFIG ─────────────────────────────────────────
 NTFY_TOPIC = "cap-payouts"
@@ -15,21 +16,23 @@ INTERVAL_HOURS = 5 / 60     # hours per 5-minute interval
 PD_CSV_URL = (
     "https://neopoint.com.au/Service/Csv"
     "?f=101%20Prices%5CDispatch%20and%20Predispatch%20Prices%205min"
-    "&from={date}%2000%3A00&period=Daily&instances=&section=-1&key=gfi2016"
+    "&from={from_time}&period=Daily&instances=&section=-1&key=gfi2016"
 )
 
-def fetch_pd(date_str):
-    url = PD_CSV_URL.format(date=date_str)
+def fetch_pd():
+    now = datetime.now()
+    from_time_str = now.strftime("%Y-%m-%d %H:%M")
+    from_time_encoded = quote(from_time_str)
+    url = PD_CSV_URL.format(from_time=from_time_encoded)
+    print(f"🔗 Fetching: {url}")
     resp = requests.get(url)
     resp.raise_for_status()
     df = pd.read_csv(StringIO(resp.text))
     # Convert first column to datetime
-    dt_col = df.columns[0]
-    df[dt_col] = pd.to_datetime(df[dt_col])
-    df.rename(columns={dt_col: 'DateTime'}, inplace=True)
     df.columns = df.columns.str.strip()
+    df.rename(columns={df.columns[0]: 'DateTime'}, inplace=True)
+    df['DateTime'] = pd.to_datetime(df['DateTime'])
     return df
-
 
 def compute_payouts(df):
     # Data covers next 12 hours inherently, so compute on full df
@@ -43,7 +46,6 @@ def compute_payouts(df):
             results[region] = payouts.sum() / 60
     return results
 
-
 def send_ntfy(results):
     lines = ["CAP PAYOUT NEXT 12 HOURS"]
     for region, payout in results.items():
@@ -52,10 +54,8 @@ def send_ntfy(results):
     print(msg)
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
 
-
 def main():
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    df = fetch_pd(date_str)
+    df = fetch_pd()
     results = compute_payouts(df)
     send_ntfy(results)
 
