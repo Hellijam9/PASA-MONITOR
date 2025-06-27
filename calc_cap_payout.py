@@ -2,7 +2,7 @@
 import requests
 import pandas as pd
 from io import StringIO
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ── CONFIG ─────────────────────────────────────────
 NTFY_TOPIC = "cap-payouts"
@@ -22,26 +22,27 @@ def fetch_pd(date_str):
     url = PD_CSV_URL.format(date=date_str)
     resp = requests.get(url)
     resp.raise_for_status()
-    # Read without parse_dates, then detect first column as datetime
     df = pd.read_csv(StringIO(resp.text))
-    # Identify datetime column (first column)
+    # Convert first column to datetime
     dt_col = df.columns[0]
     df[dt_col] = pd.to_datetime(df[dt_col])
     df.rename(columns={dt_col: 'DateTime'}, inplace=True)
     df.columns = df.columns.str.strip()
     return df
 
-def compute_next_12h_payouts(df):
-    now = datetime.now()
-    cutoff = now + timedelta(hours=12)
-    df12 = df[(df["DateTime"] >= now) & (df["DateTime"] < cutoff)]
+
+def compute_payouts(df):
+    # Data covers next 12 hours inherently, so compute on full df
     results = {}
-    for col in df12.columns:
+    for col in df.columns:
         if col.endswith("Price"):
             region = col.replace(" Price", "")
-            payouts = (df12[col] - CAP_STRIKE).clip(lower=0) * CAP_VOLUME * INTERVAL_HOURS
-            results[region] = payouts.sum()
+            # per-interval payout
+            payouts = (df[col] - CAP_STRIKE).clip(lower=0) * CAP_VOLUME * INTERVAL_HOURS
+            # sum and divide by 60 as requested
+            results[region] = payouts.sum() / 60
     return results
+
 
 def send_ntfy(results):
     lines = ["CAP PAYOUT NEXT 12 HOURS"]
@@ -51,10 +52,11 @@ def send_ntfy(results):
     print(msg)
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
 
+
 def main():
     date_str = datetime.now().strftime("%Y-%m-%d")
     df = fetch_pd(date_str)
-    results = compute_next_12h_payouts(df)
+    results = compute_payouts(df)
     send_ntfy(results)
 
 if __name__ == "__main__":
