@@ -1,0 +1,33 @@
+name: Rebid Alerts
+
+on:
+  workflow_dispatch:
+
+jobs:
+  monitor-rebids:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true  # allows pushing back state
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install pandas requests
+
+      - name: Run rebid checker
+        run: python rebid_checker.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last_rebids.csv
+          git diff --cached --quiet || git commit -m "chore: update rebid state"
+          git push
