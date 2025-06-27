@@ -23,7 +23,7 @@ def fetch_latest_two_urls():
 
     matches = re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)
 
-    if len(matches) < 20:
+    if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
     def extract_dt(filename):
@@ -31,7 +31,7 @@ def fetch_latest_two_urls():
         return datetime.strptime(match.group(1), "%Y%m%d%H%M") if match else datetime.min
 
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
-    return BASE_URL + sorted_files[19], BASE_URL + sorted_files[0]
+    return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
 
 def extract_csv(url):
     print(f"Downloading: {url}")
