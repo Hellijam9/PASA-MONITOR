@@ -33,48 +33,71 @@ def load_mapping():
 
 def fetch_rebids(url):
     today = datetime.now().strftime("%Y-%m-%d")
-    full_url = url.format(today=today)
-    resp = requests.get(full_url)
-    resp.raise_for_status()
-    return pd.read_csv(StringIO(resp.text))
+    text = requests.get(url.format(today=today)).text
+    df = pd.read_csv(StringIO(text))
+    df.columns = df.columns.str.upper().str.strip()
+    return df
 
 def send_ntfy(msg):
-    print("🔔 Sending alert:\n" + msg + "\n")
+    print("🔔 Sending ntfy alert:\n", msg, "\n")
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
 
 # ── MAIN ──────────────────────────────────────────
 def main():
     mapping = load_mapping()
     if mapping.empty:
-        print("⚠️ No DUIDs match your fuel types—check your plant CSV.")
+        print("⚠️ No matching DUIDs—check your plant CSV.")
         return
 
-    if os.path.exists(STATE_FILE):
-        seen = pd.read_csv(STATE_FILE)
-    else:
-        seen = pd.DataFrame(columns=["DUID","TIME","REGION"])
-
+    seen = pd.read_csv(STATE_FILE) if os.path.exists(STATE_FILE) else pd.DataFrame(columns=["DUID","TIME","REGION"])
     all_new = []
 
     for region, url in REDBID_URLS.items():
         df = fetch_rebids(url)
-        df["DUID"]   = df["DUID"].astype(str).str.upper().str.strip()
-        df           = df[df["DUID"].isin(mapping["DUID"])]
-        df["REGION"] = region
-        df           = df[["DUID","TIME","REASON","REGION"]]
 
-        merged = df.merge(seen, on=["DUID","TIME","REGION"], how="left", indicator=True)
+        # Find the DUID column (ends with ' DUID')
+        duid_cols = [c for c in df.columns if c.endswith(" DUID")]
+        if not duid_cols:
+            print(f"❌ No DUID column in {region} CSV; got: {df.columns.tolist()}")
+            continue
+        duid_col = duid_cols[0]
+
+        # TIME = OFFERDATE
+        if "OFFERDATE" not in df.columns:
+            print(f"❌ 'OFFERDATE' missing in {region} CSV; got: {df.columns.tolist()}")
+            continue
+
+        # REASON = *REBIDEXPLANATION
+        reason_cols = [c for c in df.columns if c.endswith("REBIDEXPLANATION")]
+        if not reason_cols:
+            print(f"❌ No REBIDEXPLANATION in {region} CSV; got: {df.columns.tolist()}")
+            continue
+        reason_col = reason_cols[0]
+
+        # Build subset
+        sub = df[[duid_col, "OFFERDATE", reason_col]].rename(
+            columns={duid_col:"DUID", "OFFERDATE":"TIME", reason_col:"REASON"}
+        )
+        sub["DUID"]   = sub["DUID"].astype(str).str.upper().str.strip()
+        sub["REGION"] = region
+
+        # Filter to your DUIDs
+        sub = sub[sub["DUID"].isin(mapping["DUID"])]
+
+        # Diff against seen
+        merged = sub.merge(seen, on=["DUID","TIME","REGION"], how="left", indicator=True)
         new    = merged[merged["_merge"]=="left_only"].drop(columns="_merge")
 
-        print(f"[{region}] {len(df)} rows fetched, {len(new)} new rebid(s).")
+        print(f"[{region}] fetched {len(sub)} rows, {len(new)} new rebid(s).")
         if not new.empty:
             all_new.append((region, new))
 
+    # Send grouped alerts
     if all_new:
         lines = []
-        for region, subset in all_new:
-            lines.append(f"📍 {region} — {len(subset)} new rebid(s)")
-            enriched = subset.merge(mapping, on="DUID", how="left")
+        for region, df_new in all_new:
+            lines.append(f"📍 {region} — {len(df_new)} new rebid(s)")
+            enriched = df_new.merge(mapping, on="DUID", how="left")
             for company, grp in enriched.groupby("COMPANY"):
                 lines.append(f"\n🏢 {company}")
                 for _, r in grp.iterrows():
@@ -83,10 +106,11 @@ def main():
     else:
         print("No new rebids detected.")
 
+    # Update state
     updated = pd.concat([seen] + [n for _, n in all_new], ignore_index=True)
     updated.drop_duplicates(["DUID","TIME","REGION"], inplace=True)
     updated.to_csv(STATE_FILE, index=False)
-    print(f"State file now has {len(updated)} entries.")
+    print(f"State file updated: {len(updated)} entries.")
 
 if __name__=="__main__":
     main()
