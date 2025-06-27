@@ -53,33 +53,33 @@ def main():
     all_new = []
 
     for region, url in REDBID_URLS.items():
-        df = fetch_rebids(url)
+            # … inside your for region, url loop …
 
-        # Find the DUID column (ends with ' DUID')
-        duid_cols = [c for c in df.columns if c.endswith(" DUID")]
-        if not duid_cols:
-            print(f"❌ No DUID column in {region} CSV; got: {df.columns.tolist()}")
-            continue
-        duid_col = duid_cols[0]
+    df = fetch_rebids(url)
 
-        # TIME = OFFERDATE
-        if "OFFERDATE" not in df.columns:
-            print(f"❌ 'OFFERDATE' missing in {region} CSV; got: {df.columns.tolist()}")
-            continue
+    # 1) DUID column is literally "DUID"
+    if "DUID" not in df.columns:
+        print(f"❌ No DUID column in {region} CSV; got: {df.columns.tolist()}")
+        continue
+    duid_col = "DUID"
 
-        # REASON = *REBIDEXPLANATION
-        reason_cols = [c for c in df.columns if c.endswith("REBIDEXPLANATION")]
-        if not reason_cols:
-            print(f"❌ No REBIDEXPLANATION in {region} CSV; got: {df.columns.tolist()}")
-            continue
-        reason_col = reason_cols[0]
+    # 2) TIME is "OFFERDATE"
+    if "OFFERDATE" not in df.columns:
+        print(f"❌ 'OFFERDATE' missing in {region} CSV; got: {df.columns.tolist()}")
+        continue
 
-        # Build subset
-        sub = df[[duid_col, "OFFERDATE", reason_col]].rename(
-            columns={duid_col:"DUID", "OFFERDATE":"TIME", reason_col:"REASON"}
-        )
-        sub["DUID"]   = sub["DUID"].astype(str).str.upper().str.strip()
-        sub["REGION"] = region
+    # 3) REASON is "REBIDEXPLANATION"
+    if "REBIDEXPLANATION" not in df.columns:
+        print(f"❌ 'REBIDEXPLANATION' missing in {region} CSV; got: {df.columns.tolist()}")
+        continue
+
+    # Build the subset
+    sub = df[[duid_col, "OFFERDATE", "REBIDEXPLANATION"]].rename(
+        columns={"DUID": "DUID", "OFFERDATE": "TIME", "REBIDEXPLANATION": "REASON"}
+    )
+    sub["DUID"]   = sub["DUID"].astype(str).str.upper().str.strip()
+    sub["REGION"] = region
+
 
         # Filter to your DUIDs
         sub = sub[sub["DUID"].isin(mapping["DUID"])]
