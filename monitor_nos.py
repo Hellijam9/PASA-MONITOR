@@ -24,7 +24,7 @@ def fetch_latest_two_urls():
     # Deduplicate file matches from HTML
     matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
 
-    if len(matches) < 2:
+    if len(matches) < 20:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
     def extract_dt(filename):
@@ -40,7 +40,7 @@ def fetch_latest_two_urls():
     for ts, f in files_with_times[:5]:
         print(f"  {ts}  →  {f}")
 
-    return BASE_URL + files_with_times[1][1], BASE_URL + files_with_times[0][1]
+    return BASE_URL + files_with_times[19][19], BASE_URL + files_with_times[0][19]
 
 
 
