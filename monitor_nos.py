@@ -8,7 +8,7 @@ import pytz
 import sys
 
 BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
-NTFY_URL = "https://ntfy.sh/pasa-alerts"
+NTFY_URL = "https://ntfy.sh/outage-alerts"
 
 NEO_CSV_LINKS = {
     "NSW1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=NSW1&section=-1&key=gfi2016",
