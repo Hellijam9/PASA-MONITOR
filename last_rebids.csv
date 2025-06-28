@@ -1,49 +1,79 @@
-DUID,TIME,REGION,REASON
-TALWA1,2025-06-27 01:25:53,NSW1,Adj bands - change in NSW RRP HHE 0230 $143 v $132 @0130 P30 run SL
-MP1,2025-06-27 03:10:22,NSW1,Adj bands - change in NSW RRP 5ME 0345 $240.9 v $180.0 @0310 P5 run SL
-MP2,2025-06-27 03:10:22,NSW1,Adj bands - change in NSW RRP 5ME 0345 $240.9 v $180.0 @0310 P5 run SL
-KPP_1,2025-06-27 00:00:58,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:03:06,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:07:57,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:15:48,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:21:47,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:32:56,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:40:49,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:43:16,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:47:58,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 00:52:58,QLD1,Ambient Temperature - AT
-CPP_3,2025-06-27 01:02:34,QLD1,QLD1 DI 27-06-2025 01:05:00 RRP $101.83 vs P5 RRP $116 @ P5 RUN 27-06-2025 01:00:00 - RRP CHANGE OF $-14.17
-CPP_4,2025-06-27 01:02:34,QLD1,QLD1 DI 27-06-2025 01:05:00 RRP $101.83 vs P5 RRP $116 @ P5 RUN 27-06-2025 01:00:00 - RRP CHANGE OF $-14.17
-KPP_1,2025-06-27 01:03:02,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:07:59,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:15:47,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:19:14,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:22:56,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:30:18,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:37:52,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:50:49,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 01:52:56,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:01:38,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:02:54,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:17:57,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:27:57,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:37:56,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:42:57,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:56:42,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 02:57:58,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:02:57,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:09:19,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:17:56,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:22:57,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:32:58,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:40:18,QLD1,Ambient Temperature - AT
-KPP_1,2025-06-27 03:43:05,QLD1,Ambient Temperature - AT
-LOYYB1,2025-06-27 00:26:59,VIC1,Revise unit output base on coal quality SL
-LOYYB2,2025-06-27 00:26:59,VIC1,Revise unit output base on coal quality SL
-MURRAY,2025-06-27 01:31:30,VIC1,01:31:30 P MANAGE SMALL UNECONOMIC MARGINAL TARGETS - REBID ECONOMIC MINIMUM LOADING VALUE - SL
-NPS,2025-06-27 02:34:42,VIC1,Adj bands - change in VIC RRP 5ME 0325 $240.9 v $200.0 @0235 P5 run SL
-WKIEWA1,2025-06-27 02:35:13,VIC1,070 Reduced water avail~704 inflow chg affecting pondage levels
-QPS1,2025-06-27 01:44:36,SA1,DEC SA Semi-scheduled 5PD 140 MW < 30PD 163 MW @ 0200 SL
-QPS3,2025-06-27 01:44:36,SA1,DEC SA Semi-scheduled 5PD 140 MW < 30PD 163 MW @ 0200 SL
-TORRB2,2025-06-27 02:27:42,SA1,040 Chg in AEMO DISP~45 Price change vs PD [sa] [$229.20 disp v pe 0230 $286.13]
-TORRB3,2025-06-27 02:27:42,SA1,040 Chg in AEMO DISP~45 Price change vs PD [sa] [$229.20 disp v pe 0230 $286.13]
+DUID,TIME,REGION,REASON,REASON_old
+TALWA1,2025-06-27 01:25:53,NSW1,Adj bands - change in NSW RRP HHE 0230 $143 v $132 @0130 P30 run SL,
+MP1,2025-06-27 03:10:22,NSW1,Adj bands - change in NSW RRP 5ME 0345 $240.9 v $180.0 @0310 P5 run SL,
+MP2,2025-06-27 03:10:22,NSW1,Adj bands - change in NSW RRP 5ME 0345 $240.9 v $180.0 @0310 P5 run SL,
+KPP_1,2025-06-27 00:00:58,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:03:06,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:07:57,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:15:48,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:21:47,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:32:56,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:40:49,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:43:16,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:47:58,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 00:52:58,QLD1,Ambient Temperature - AT,
+CPP_3,2025-06-27 01:02:34,QLD1,QLD1 DI 27-06-2025 01:05:00 RRP $101.83 vs P5 RRP $116 @ P5 RUN 27-06-2025 01:00:00 - RRP CHANGE OF $-14.17,
+CPP_4,2025-06-27 01:02:34,QLD1,QLD1 DI 27-06-2025 01:05:00 RRP $101.83 vs P5 RRP $116 @ P5 RUN 27-06-2025 01:00:00 - RRP CHANGE OF $-14.17,
+KPP_1,2025-06-27 01:03:02,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:07:59,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:15:47,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:19:14,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:22:56,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:30:18,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:37:52,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:50:49,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 01:52:56,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:01:38,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:02:54,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:17:57,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:27:57,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:37:56,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:42:57,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:56:42,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 02:57:58,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:02:57,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:09:19,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:17:56,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:22:57,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:32:58,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:40:18,QLD1,Ambient Temperature - AT,
+KPP_1,2025-06-27 03:43:05,QLD1,Ambient Temperature - AT,
+LOYYB1,2025-06-27 00:26:59,VIC1,Revise unit output base on coal quality SL,
+LOYYB2,2025-06-27 00:26:59,VIC1,Revise unit output base on coal quality SL,
+MURRAY,2025-06-27 01:31:30,VIC1,01:31:30 P MANAGE SMALL UNECONOMIC MARGINAL TARGETS - REBID ECONOMIC MINIMUM LOADING VALUE - SL,
+NPS,2025-06-27 02:34:42,VIC1,Adj bands - change in VIC RRP 5ME 0325 $240.9 v $200.0 @0235 P5 run SL,
+WKIEWA1,2025-06-27 02:35:13,VIC1,070 Reduced water avail~704 inflow chg affecting pondage levels,
+QPS1,2025-06-27 01:44:36,SA1,DEC SA Semi-scheduled 5PD 140 MW < 30PD 163 MW @ 0200 SL,
+QPS3,2025-06-27 01:44:36,SA1,DEC SA Semi-scheduled 5PD 140 MW < 30PD 163 MW @ 0200 SL,
+TORRB2,2025-06-27 02:27:42,SA1,040 Chg in AEMO DISP~45 Price change vs PD [sa] [$229.20 disp v pe 0230 $286.13],
+TORRB3,2025-06-27 02:27:42,SA1,040 Chg in AEMO DISP~45 Price change vs PD [sa] [$229.20 disp v pe 0230 $286.13],
+BW01,2025-06-28 01:52:27,NSW1,01:50~P~020 Reduction in avail cap~203 plant failure id fan,
+BW01,2025-06-28 01:52:41,NSW1,Availability Change,
+BW03,2025-06-28 01:53:15,NSW1,01:50~P~010 Unexpected/plant limits~112 redist across portfolio - BW01 plant failure,
+BW04,2025-06-28 01:53:15,NSW1,01:50~P~010 Unexpected/plant limits~112 redist across portfolio - BW01 plant failure,
+BW01,2025-06-28 02:02:41,NSW1,Availability change as advised by ops data,
+BW01,2025-06-28 02:07:43,NSW1,Availability change as advised by ops data,
+BW01,2025-06-28 02:13:05,NSW1,020 Reduction in avail cap~203 plant failure,
+BW01,2025-06-28 03:32:44,NSW1,Availability change as advised by ops data,
+BW01,2025-06-28 03:33:43,NSW1,030 Increase in avail cap~301 plant limit lifted,
+KPP_1,2025-06-28 00:23:28,QLD1,Unit commitment-Rebid to match Scada-SL,
+KPP_1,2025-06-28 00:38:22,QLD1,Unit commitment-Rebid to match Scada-SL,
+GSTONE4,2025-06-28 00:50:52,QLD1,Mill -Other-SL,
+KPP_1,2025-06-28 00:51:39,QLD1,Unit commitment-Rebid to match Scada-SL,
+KPP_1,2025-06-28 00:56:42,QLD1,Unit commitment-Rebid to match Scada-SL,
+GSTONE2,2025-06-28 01:51:37,QLD1,Market condition changed--SL QLD1 TI 2025-06-28 01:50:00 RRP $148.73 vs P5 RRP $116.45 @ P5 RUN 2025-06-28 01:45:00 - CHANGE OF $32.28,
+GSTONE4,2025-06-28 01:51:37,QLD1,Market condition changed--SL QLD1 TI 2025-06-28 01:50:00 RRP $148.73 vs P5 RRP $116.45 @ P5 RUN 2025-06-28 01:45:00 - CHANGE OF $32.28,
+GSTONE5,2025-06-28 01:51:37,QLD1,Market condition changed--SL QLD1 TI 2025-06-28 01:50:00 RRP $148.73 vs P5 RRP $116.45 @ P5 RUN 2025-06-28 01:45:00 - CHANGE OF $32.28,
+KPP_1,2025-06-28 02:11:48,QLD1,Unit commitment-Rebid to match Scada-SL,
+KPP_1,2025-06-28 03:12:38,QLD1,Unit commitment-Rebid to match Scada-SL,
+KPP_1,2025-06-28 03:22:28,QLD1,Unit commitment-Rebid to match Scada-SL,
+LYA2,2025-06-28 01:03:13,VIC1,01:02~P~030 Increase in avail cap~301 plant limit lifted,
+MURRAY,2025-06-28 01:16:30,VIC1,01:16:30 P MANAGE SMALL UNECONOMIC MARGINAL TARGETS - REBID ECONOMIC MINIMUM LOADING VALUE - SL,
+WKIEWA1,2025-06-28 01:20:24,VIC1,070 Reduced water avail~704 inflow chg affecting pondage levels,
+LYA2,2025-06-28 01:48:51,VIC1,01:48~P~030 Increase in avail cap~301 plant limit lifted,
+LYA2,2025-06-28 02:09:52,VIC1,02:09~P~030 Increase in avail cap~301 plant limit lifted,
+OSB-AG,2025-06-28 00:23:26,SA1,Change in avail - revised ambient conditions SL,
+BARKIPS1,2025-06-28 01:58:48,SA1,01:50~P~010 Unexpected/plant limits~112 redist across portfolio - BW01 plant failure,
+TORRB2,2025-06-28 01:58:48,SA1,01:50~P~010 Unexpected/plant limits~112 redist across portfolio - BW01 plant failure,
+TORRB3,2025-06-28 01:58:48,SA1,01:50~P~010 Unexpected/plant limits~112 redist across portfolio - BW01 plant failure,
+OSB-AG,2025-06-28 03:20:37,SA1,Change in avail - revised ambient conditions SL,
