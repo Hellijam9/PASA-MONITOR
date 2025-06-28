@@ -2,7 +2,7 @@ import requests
 import zipfile
 import pandas as pd
 import re
-from io import BytesIO
+from io import BytesIO, StringIO
 from datetime import datetime
 import pytz
 import sys
@@ -10,34 +10,29 @@ import sys
 BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
 NTFY_URL = "https://ntfy.sh/outage-alerts"
 
-# NeoPoint CSV links with Two Years period
-NEO_CSV_LINKS = {
-    "NSW1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=NSW1&section=-5&key=gfi2016",
-    "QLD1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=QLD1&section=-5&key=gfi2016",
-    "VIC1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=VIC1&section=-5&key=gfi2016",
-    "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=SA1&section=-5&key=gfi2016"
-}
-
-# Fetch the two most recent AEMO network outage files
+# Fetch the 30th-oldest and the newest NEMWEB public network ZIP URLs
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
     matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
-    if len(matches) < 2:
+    if len(matches) < 30:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
     def extract_dt(fn):
         m = re.search(r'PUBLIC_NETWORK_(\d{14})_', fn)
         return datetime.strptime(m.group(1), "%Y%m%d%H%M%S") if m else datetime.min
 
-    items = [(extract_dt(fn), fn) for fn in matches]
-    items.sort(reverse=True)
-    print("📂 Top 5 files sorted by timestamp:")
-    for ts, fn in items[:5]:
-        print(f"  {ts}  →  {fn}")
-    return BASE_URL + items[1][1], BASE_URL + items[0][1]
+    files = [(extract_dt(fn), fn) for fn in matches]
+    files.sort(reverse=True)
 
-# Extract outage CSV from ZIP, get outage IDs
+    print("📂 Top 5 files sorted by timestamp:")
+    for ts, fn in files[:5]:
+        print(f"  {ts}  →  {fn}")
+
+    # Return the 30th most recent (index 29) and the latest (index 0)
+    return BASE_URL + files[29][1], BASE_URL + files[0][1]
+
+# Download and parse the CSV content from a NEMWEB ZIP URL
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
@@ -46,94 +41,79 @@ def extract_csv(url):
         fn = z.namelist()[0]
         print(f"✅ Extracting: {fn}")
         with z.open(fn) as f:
-            df = pd.read_csv(f, header=None, skiprows=2)
-            df.columns = range(df.shape[1])
-            df[4] = df[4].astype(str).str.strip().str.lstrip("0")
-            print(f"🔎 Sample outage IDs: {df[4].dropna().unique()[:5]}")
-            return df
+            # Read only lines starting with 'D'
+            lines = [line.decode('utf-8', 'ignore') for line in f if line.startswith(b'D')]
 
-# Load NeoPoint metadata for planned outages
-def load_neo_mapping():
-    today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    mapping = {}
-    for region, tmpl in NEO_CSV_LINKS.items():
-        url = tmpl.format(today=today)
-        try:
-            df = pd.read_csv(url, header=None, encoding="utf-8", on_bad_lines='skip')
-            df = df[df[2].astype(str).str.strip().str.match(r'^\d+$')]
-            print(f"📊 {region} rows: {len(df)}")
-            for _, r in df.iterrows():
-                oid = r[2].strip().lstrip("0")
-                mapping[oid] = {
-                    "state": r[3],
-                    "owner": r[4],
-                    "substation_desc": r[6],
-                    "equipment_desc": r[9],
-                    "set_desc": r[11]
-                }
-        except Exception as e:
-            print(f"⚠️ NeoPoint {region} load error: {e}")
-    print(f"📦 NeoPoint mapping count: {len(mapping)} IDs")
-    return mapping
+    # Fixed-width parsing according to NEMWEB spec
+    widths = [1,15,15,5,10,15,15,15,15,10,12,15,15,20,20,20,80,5,20,20,20,20]
+    df = pd.read_fwf(StringIO(''.join(lines)), widths=widths, header=None)
+    # Assign column names based on spec
+    cols = [
+        "RECTYPE","REPORTID","RECORDTYPE","VERSION","OUTAGEID","SUBSTATIONID",
+        "EQUIPMENTTYPE","EQUIPMENTID","STARTTIME","ENDTIME","SUBMITTEDDATE",
+        "OUTAGESTATUSCODE","RESUBMITREASON","RESUBMITOUTAGEID","RECALLTIMEDAY",
+        "RECALLTIMENIGHT","REASON","ISSECONDARY","ACTUAL_STARTTIME",
+        "ACTUAL_ENDTIME","COMPANYREFCODE","ELEMENTID"
+    ][:df.shape[1]]
+    df.columns = cols
+    df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
+    return df
 
-# Safe parse datetime
-def parse_dt(v):
+# Safely parse a NEMWEB datetime field
+
+def parse_datetime_safe(val):
     try:
-        return pd.to_datetime(str(v).replace("COMP", "").strip(), errors="coerce")
+        s = str(val).replace('COMP','').strip()
+        return pd.to_datetime(s, errors='coerce')
     except:
         return pd.NaT
 
-# Compare old vs new outages, fallback to AEMO data for cleared
-def compare_outages(old, new):
-    col = 4
-    old[col] = old[col].str.strip().str.lstrip("0")
-    new[col] = new[col].str.strip().str.lstrip("0")
-    oids, nids = set(old[col]), set(new[col])
-    print(f"🔁 Comparing {len(oids)} old vs {len(nids)} new IDs")
-    added, removed = nids - oids, oids - nids
-    if not added and not removed:
-        print("No new or cleared network outages detected.")
-        return
-    print(f"🟥 New: {len(added)} | 🟩 Cleared: {len(removed)}")
-    meta = load_neo_mapping()
-    lines = []
-    for label, ids, df_ in [("🟥", added, new), ("🟩", removed, old)]:
-        if ids:
-            lines.append(f"{label} {len(ids)} outages:")
-            for oid in ids:
-                row = df_[df_[col] == oid]
-                if row.empty:
-                    continue
-                r = row.iloc[0]
-                # choose appropriate date fields
-                s = parse_dt(r[9])
-                e = parse_dt(r[10])
-                info = meta.get(oid)
-                if not info:
-                    # For cleared outages, use actual start/end from AEMO
-                    s = parse_dt(r[19])
-                    e = parse_dt(r[20])
-                    info = {
-                        "state": "AEMO",
-                        "owner": "AEMO",
-                        "substation_desc": r[5],  # SUBSTATIONID from AEMO
-                        "equipment_desc": f"{r[6]} {r[7]}",  # EQUIPMENTTYPE + EQUIPMENTID
-                        "set_desc": r[17]  # REASON from AEMO
-                    }
-                # compute duration and quarter once dates set
-                dur = max((e - s).days + 1, 0) if pd.notna(s) and pd.notna(e) else "?"
-                qtr = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
-                lines.append(
-                    f"  {info['state']} | {info['owner']} | {info['substation_desc']} | "
-                    f"{info['equipment_desc']} | {info['set_desc']} | "
-                    f"{s.date() if pd.notna(s) else '?'} to {e.date() if pd.notna(e) else '?'} "
-                    f"({dur} days, Q{qtr} {s.year if pd.notna(s) else '?'})"
-                )
-    msg = "\n".join(lines)
-    print("\n" + msg)
-    requests.post(NTFY_URL, data=msg.encode("utf-8"))
+# Compare two outage DataFrames and send notification via ntfy
 
-# Entry point
+def compare_outages(df_old, df_new):
+    old_ids = set(df_old["OUTAGEID"])
+    new_ids = set(df_new["OUTAGEID"])
+    added = sorted(new_ids - old_ids)
+    removed = sorted(old_ids - new_ids)
+    lines = []
+
+    if added:
+        lines.append(f"🟥 {len(added)} new outages:")
+        for oid in added:
+            row = df_new[df_new["OUTAGEID"] == oid].iloc[0]
+            start = parse_datetime_safe(row["STARTTIME"])
+            end = parse_datetime_safe(row["ENDTIME"])
+            dur = (end - start).days + 1 if pd.notna(start) and pd.notna(end) else '?'  
+            lines.append(
+                f"  {row['SUBSTATIONID']} | {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → "
+                f"{start.date() if pd.notna(start) else '?'} to {end.date() if pd.notna(end) else '?'} "
+                f"({dur} days)"
+            )
+
+    if removed:
+        lines.append(f"🟩 {len(removed)} cleared outages:")
+        for oid in removed:
+            row = df_old[df_old["OUTAGEID"] == oid].iloc[0]
+            start = parse_datetime_safe(row["ACTUAL_STARTTIME"])
+            end = parse_datetime_safe(row["ACTUAL_ENDTIME"])
+            dur = (end - start).days + 1 if pd.notna(start) and pd.notna(end) else '?'  
+            lines.append(
+                f"  {row['SUBSTATIONID']} | {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → "
+                f"{start.date() if pd.notna(start) else '?'} to {end.date() if pd.notna(end) else '?'} "
+                f"({dur} days)"
+            )
+
+    msg = '\n'.join(lines) if lines else "No new or cleared network outages detected."
+    print(msg)
+    # Send via ntfy
+    requests.post(NTFY_URL, data=msg.encode('utf-8'))
+
+# Main
 if __name__ == "__main__":
-    # Pass True to run in test mode
-    run_scheduler(test=("--test" in sys.argv))
+    test = "--test" in sys.argv
+    if test:
+        print("🧪 Running in TEST mode – simulating now.")
+    u_old, u_new = fetch_latest_two_urls()
+    df_old = extract_csv(u_old)
+    df_new = extract_csv(u_new)
+    compare_outages(df_old, df_new)
