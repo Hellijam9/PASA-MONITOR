@@ -62,20 +62,29 @@ def load_neo_mapping():
         url = url_template.format(today=today)
         try:
             df = pd.read_csv(url, skiprows=1, header=None)
+
             for _, row in df.iterrows():
+                if pd.isna(row[2]):
+                    continue
+
                 outage_id = str(row[2]).strip().lstrip("0")
+                if outage_id == "":
+                    continue
+
                 mapping[outage_id] = {
-                    "state": row[3],
-                    "owner": row[4],
-                    "substation_desc": row[6],
-                    "equipment_desc": row[9],
-                    "set_desc": row[11]
+                    "state": str(row[3]).strip() if pd.notna(row[3]) else state_code,
+                    "owner": str(row[4]).strip() if pd.notna(row[4]) else "?",
+                    "substation_desc": str(row[6]).strip() if pd.notna(row[6]) else "?",
+                    "equipment_desc": str(row[9]).strip() if pd.notna(row[9]) else "?",
+                    "set_desc": str(row[11]).strip() if pd.notna(row[11]) else "?"
                 }
+
         except Exception as e:
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
     print(f"📦 NeoPoint mapping loaded with {len(mapping)} outage IDs")
     return mapping
+
 
 def parse_dt(val):
     try:
