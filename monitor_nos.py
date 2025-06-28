@@ -87,7 +87,7 @@ def load_neo_mapping():
             for _, row in df.iterrows():
                 sid = row.iloc[6]
                 substation_to_state[sid] = state_code
-                outage_id = str(row.iloc[2]).strip()  # OUTAGEID from column C
+                outage_id = str(row.iloc[2]).strip()
                 equip_desc = str(row.iloc[10]).strip()
                 set_desc = str(row.iloc[12]).strip()
                 neo_details[outage_id] = (equip_desc, set_desc)
@@ -95,5 +95,3 @@ def load_neo_mapping():
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
     return substation_to_state
-
-# rest of the code remains unchanged
