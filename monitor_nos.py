@@ -60,8 +60,8 @@ def load_neo_mapping():
         url = tmpl.format(today=today)
         try:
             df = pd.read_csv(url, header=None, encoding="utf-8", on_bad_lines='skip')
-            # Filter numeric Outage IDs (strip whitespace)
-            df = df[df[2].astype(str).str.strip().str.match(r'^\d+$')]
+            # Filter numeric Outage IDs
+            df = df[df[2].astype(str).str.match(r'^\d+$')]
             print(f"📊 {region} rows: {len(df)}")
             for _, r in df.iterrows():
                 oid = r[2].strip().lstrip("0")
@@ -97,6 +97,10 @@ def compare_outages(old, new):
         return
     print(f"🟥 New: {len(added)} | 🟩 Cleared: {len(removed)}")
     meta = load_neo_mapping()
+    # Debug: show which IDs have no metadata
+    missing_meta = [oid for oid in removed if oid not in meta] + [oid for oid in added if oid not in meta]
+    if missing_meta:
+        print(f"❓ No NeoPoint metadata for IDs: {missing_meta}")
     lines = []
     for label, ids, df_ in [("🟥", added, new), ("🟩", removed, old)]:
         if ids:
@@ -115,9 +119,11 @@ def compare_outages(old, new):
                     f"{s.date() if pd.notna(s) else '?'} to {e.date() if pd.notna(e) else '?'} "
                     f"({dur} days, Q{qtr} {s.year if pd.notna(s) else '?'})"
                 )
-    msg = "\n".join(lines)
-    print("\n" + msg)
-    requests.post(NTFY_URL, data=msg.encode("utf-8"))
+    msg = "
+".join(lines)
+    print("
+" + msg)
+    requests.post(NTFY_URL, data=msg.encode("utf-8"))(NTFY_URL, data=msg.encode("utf-8"))
 
 
 def run_scheduler(test=False):
