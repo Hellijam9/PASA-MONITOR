@@ -49,23 +49,15 @@ def extract_csv(url):
         file_name = z.namelist()[0]
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            df = pd.read_csv(f, skiprows=2, header=None)
-            df.columns = list(range(df.shape[1]))  # Just label as 0,1,2,...
-            df = df.rename(columns={
-                4: "OUTAGEID",
-                6: "SUBSTATIONID",
-                7: "EQUIPMENTTYPE",
-                8: "EQUIPMENTID",
-                9: "STARTTIME",
-                10: "ENDTIME"
-            })
-            df = df[["OUTAGEID", "SUBSTATIONID", "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME"]]
-            df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
+            df = pd.read_csv(f, header=None, skiprows=2)
+            df.columns = list(range(df.shape[1]))  # Ensure consistent integer columns
+            df[4] = df[4].astype(str).str.strip()  # Outage ID column (E = index 4)
+            print(f"🔎 Sample outage IDs from {file_name}: {df[4].dropna().unique()[:5]}")
             return df
 
 def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    mapping = {}  # outage_id → {state, owner, substation_desc, equipment_desc, set_desc}
+    mapping = {}
 
     for state_code, url_template in NEO_CSV_LINKS.items():
         url = url_template.format(today=today)
@@ -74,7 +66,7 @@ def load_neo_mapping():
             for _, row in df.iterrows():
                 outage_id = str(row[2]).strip()
                 mapping[outage_id] = {
-                    "state": row[3] if pd.notna(row[3]) else state_code,
+                    "state": row[3],
                     "owner": row[4],
                     "substation_desc": row[6],
                     "equipment_desc": row[9],
@@ -86,62 +78,46 @@ def load_neo_mapping():
     return mapping
 
 def compare_outages(df_old, df_new):
+    outage_col = 4  # Column E
+    old_ids = set(df_old[outage_col].astype(str).str.strip())
+    new_ids = set(df_new[outage_col].astype(str).str.strip())
+
+    print(f"🔁 Comparing {len(old_ids)} old IDs vs {len(new_ids)} new IDs")
+
+    added_ids = new_ids - old_ids
+    removed_ids = old_ids - new_ids
+
+    if not added_ids and not removed_ids:
+        print("No new or cleared network outages detected.")
+        return
+
+    print(f"🟥 New: {len(added_ids)}")
+    print(f"🟩 Cleared: {len(removed_ids)}")
+
     mapping = load_neo_mapping()
-    old_ids = set(df_old["OUTAGEID"])
-    new_ids = set(df_new["OUTAGEID"])
-
-    added = df_new[df_new["OUTAGEID"].isin(new_ids - old_ids)]
-    removed = df_old[df_old["OUTAGEID"].isin(old_ids - new_ids)]
-
-    def parse_dt(val):
-        try:
-            return pd.to_datetime(str(val).replace("COMP", "").strip(), errors="coerce")
-        except:
-            return pd.NaT
-
     lines = []
 
-    if added.empty and removed.empty:
-        lines.append("No new or cleared network outages detected.")
-    else:
-        if not added.empty:
-            lines.append(f"🟥 {len(added)} new outages:")
-            for _, row in added.iterrows():
-                outage_id = row["OUTAGEID"]
-                info = mapping.get(outage_id, {})
-                start = parse_dt(row["STARTTIME"])
-                end = parse_dt(row["ENDTIME"])
-                if pd.isna(start) or pd.isna(end):
-                    continue
-                duration = (end - start).days + 1
-                qtr = (start.month - 1) // 3 + 1
-                lines.append(
-                    f"  {info.get('state','?')} | {info.get('owner','?')} | {info.get('substation_desc','?')} | "
-                    f"{info.get('equipment_desc','?')} | {info.get('set_desc','?')} | {start.date()} to {end.date()} "
-                    f"({duration} days, Q{qtr} {start.year})"
-                )
+    if added_ids:
+        lines.append(f"🟥 {len(added_ids)} new outages:")
+        for outage_id in added_ids:
+            info = mapping.get(outage_id, {})
+            lines.append(
+                f"  {info.get('state', '?')} | {info.get('owner', '?')} | {info.get('substation_desc', '?')} | "
+                f"{info.get('equipment_desc', '?')} | {info.get('set_desc', '?')} | ID: {outage_id}"
+            )
 
-        if not removed.empty:
-            lines.append(f"\n🟩 {len(removed)} cleared outages:")
-            for _, row in removed.iterrows():
-                outage_id = row["OUTAGEID"]
-                info = mapping.get(outage_id, {})
-                start = parse_dt(row["STARTTIME"])
-                end = parse_dt(row["ENDTIME"])
-                if pd.isna(start) or pd.isna(end):
-                    continue
-                duration = (end - start).days + 1
-                qtr = (start.month - 1) // 3 + 1
-                lines.append(
-                    f"  {info.get('state','?')} | {info.get('owner','?')} | {info.get('substation_desc','?')} | "
-                    f"{info.get('equipment_desc','?')} | {info.get('set_desc','?')} | {start.date()} to {end.date()} "
-                    f"({duration} days, Q{qtr} {start.year})"
-                )
+    if removed_ids:
+        lines.append(f"\n🟩 {len(removed_ids)} cleared outages:")
+        for outage_id in removed_ids:
+            info = mapping.get(outage_id, {})
+            lines.append(
+                f"  {info.get('state', '?')} | {info.get('owner', '?')} | {info.get('substation_desc', '?')} | "
+                f"{info.get('equipment_desc', '?')} | {info.get('set_desc', '?')} | ID: {outage_id}"
+            )
 
-    final = "\n".join(lines)
-    print("\n" + final)
-    if "🟥" in final or "🟩" in final:
-        requests.post(NTFY_URL, data=final.encode("utf-8"))
+    message = "\n".join(lines)
+    print("\n" + message)
+    requests.post(NTFY_URL, data=message.encode("utf-8"))
 
 def run_scheduler(test_mode=False):
     if test_mode:
