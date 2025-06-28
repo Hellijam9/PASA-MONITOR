@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
 import requests
 import zipfile
 import pandas as pd
 import re
-from io import BytesIO, StringIO
+from io import BytesIO
 from datetime import datetime
 import pytz
 import sys
@@ -20,11 +21,9 @@ NEO_CSV_LINKS = {
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
-
-    # Deduplicate file matches from HTML
     matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
 
-    if len(matches) < 30:
+    if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
     def extract_dt(filename):
@@ -40,24 +39,8 @@ def fetch_latest_two_urls():
     for ts, f in files_with_times[:5]:
         print(f"  {ts}  →  {f}")
 
-    return BASE_URL + files_with_times[29][1], BASE_URL + files_with_times[0][1]
+    return BASE_URL + files_with_times[1][1], BASE_URL + files_with_times[0][1]
 
-
-
-
-    df.columns = [
-        "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
-        "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
-        "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
-        "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
-        "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-    ][:df.shape[1]]
-
-    # Clean OUTAGEID to ensure consistent matching
-    df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
-
-    return df
-    
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
@@ -66,122 +49,99 @@ def extract_csv(url):
         file_name = z.namelist()[0]
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            lines = [line.decode("utf-8", errors="ignore").strip() for line in f if line.startswith(b"D")]
-            if not lines:
-                raise ValueError("❌ No data lines found starting with 'D'.")
-
-            df = pd.read_fwf(StringIO("\n".join(lines)), widths=[
-                1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 80, 5, 20, 20, 20, 20
-            ], header=None)
-
-            df.columns = [
-                "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
-                "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
-                "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
-                "RECALLTIMENIGHT", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
-                "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-            ][:df.shape[1]]
-
-            # Optional cleanup
+            df = pd.read_csv(f, skiprows=2, header=None)
+            df.columns = list(range(df.shape[1]))  # Just label as 0,1,2,...
+            df = df.rename(columns={
+                4: "OUTAGEID",
+                6: "SUBSTATIONID",
+                7: "EQUIPMENTTYPE",
+                8: "EQUIPMENTID",
+                9: "STARTTIME",
+                10: "ENDTIME"
+            })
+            df = df[["OUTAGEID", "SUBSTATIONID", "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME"]]
             df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
-            df["SUBSTATIONID"] = df["SUBSTATIONID"].astype(str).str.strip()
-            df["STARTTIME"] = df["STARTTIME"].astype(str).str.replace("COMP", "", regex=False)
-            df["ENDTIME"] = df["ENDTIME"].astype(str).str.replace("COMP", "", regex=False)
-
             return df
-
-
-
 
 def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    substation_to_state = {}
+    mapping = {}  # outage_id → {state, owner, substation_desc, equipment_desc, set_desc}
 
     for state_code, url_template in NEO_CSV_LINKS.items():
         url = url_template.format(today=today)
         try:
-            df = pd.read_csv(url)
-
-            # Using column indexes (based on your CSVs)
-            # Assume:  substationid at col 6, state is from state_code key directly
-            # Just map substationid to state_code
-            # Defensive check for required column index
-            if df.shape[1] < 7:
-                print(f"⚠️ NeoPoint CSV for {state_code} missing expected columns, skipping")
-                continue
-
-            # Column index 6 is substationid based on your examples (0-based)
-            # Loop rows to build dict
-            for substation_id in df.iloc[:,6].dropna().unique():
-                substation_to_state[substation_id] = state_code
-
+            df = pd.read_csv(url, skiprows=1, header=None)
+            for _, row in df.iterrows():
+                outage_id = str(row[2]).strip()
+                mapping[outage_id] = {
+                    "state": row[3] if pd.notna(row[3]) else state_code,
+                    "owner": row[4],
+                    "substation_desc": row[6],
+                    "equipment_desc": row[9],
+                    "set_desc": row[11]
+                }
         except Exception as e:
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
-    return substation_to_state
-    
+    return mapping
+
 def compare_outages(df_old, df_new):
-    # Load mapping once
-    substation_to_state = load_neo_mapping()
-
-    def parse_datetime_safe(val):
-        try:
-            # Remove junk like COMP or quotes/commas
-            val_clean = str(val).strip().replace('"', '').replace(',', '')
-            val_clean = val_clean.split()[0] + " " + val_clean.split()[1].split("C")[0]
-            return pd.to_datetime(val_clean, errors="coerce", dayfirst=False)
-        except Exception:
-            return pd.NaT
-
+    mapping = load_neo_mapping()
     old_ids = set(df_old["OUTAGEID"])
     new_ids = set(df_new["OUTAGEID"])
 
     added = df_new[df_new["OUTAGEID"].isin(new_ids - old_ids)]
     removed = df_old[df_old["OUTAGEID"].isin(old_ids - new_ids)]
 
-    message_lines = []
+    def parse_dt(val):
+        try:
+            return pd.to_datetime(str(val).replace("COMP", "").strip(), errors="coerce")
+        except:
+            return pd.NaT
+
+    lines = []
 
     if added.empty and removed.empty:
-        message_lines.append("No new or cleared network outages detected.")
+        lines.append("No new or cleared network outages detected.")
     else:
         if not added.empty:
-            message_lines.append(f"🟥 {len(added)} new outages:")
-            for state, group_state in added.groupby(lambda r: substation_to_state.get(added.loc[r, "SUBSTATIONID"], "UNKNOWN")):
-                message_lines.append(f"\nState: {state}")
-                for substation, group_sub in group_state.groupby("SUBSTATIONID"):
-                    message_lines.append(f"  Substation: {substation}")
-                    for _, row in group_sub.iterrows():
-                        start = parse_datetime_safe(row["STARTTIME"])
-                        end = parse_datetime_safe(row["ENDTIME"])
-                        if pd.isna(start) or pd.isna(end):
-                            continue
-                        duration = (end - start).days + 1
-                        qtr = (start.month - 1) // 3 + 1
-                        message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
+            lines.append(f"🟥 {len(added)} new outages:")
+            for _, row in added.iterrows():
+                outage_id = row["OUTAGEID"]
+                info = mapping.get(outage_id, {})
+                start = parse_dt(row["STARTTIME"])
+                end = parse_dt(row["ENDTIME"])
+                if pd.isna(start) or pd.isna(end):
+                    continue
+                duration = (end - start).days + 1
+                qtr = (start.month - 1) // 3 + 1
+                lines.append(
+                    f"  {info.get('state','?')} | {info.get('owner','?')} | {info.get('substation_desc','?')} | "
+                    f"{info.get('equipment_desc','?')} | {info.get('set_desc','?')} | {start.date()} to {end.date()} "
+                    f"({duration} days, Q{qtr} {start.year})"
+                )
 
         if not removed.empty:
-            message_lines.append(f"\n🟩 {len(removed)} cleared outages:")
-            for state, group_state in removed.groupby(lambda r: substation_to_state.get(removed.loc[r, "SUBSTATIONID"], "UNKNOWN")):
-                message_lines.append(f"\nState: {state}")
-                for substation, group_sub in group_state.groupby("SUBSTATIONID"):
-                    message_lines.append(f"  Substation: {substation}")
-                    for _, row in group_sub.iterrows():
-                        start = parse_datetime_safe(row["STARTTIME"])
-                        end = parse_datetime_safe(row["ENDTIME"])
-                        if pd.isna(start) or pd.isna(end):
-                            continue
-                        duration = (end - start).days + 1
-                        qtr = (start.month - 1) // 3 + 1
-                        message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
+            lines.append(f"\n🟩 {len(removed)} cleared outages:")
+            for _, row in removed.iterrows():
+                outage_id = row["OUTAGEID"]
+                info = mapping.get(outage_id, {})
+                start = parse_dt(row["STARTTIME"])
+                end = parse_dt(row["ENDTIME"])
+                if pd.isna(start) or pd.isna(end):
+                    continue
+                duration = (end - start).days + 1
+                qtr = (start.month - 1) // 3 + 1
+                lines.append(
+                    f"  {info.get('state','?')} | {info.get('owner','?')} | {info.get('substation_desc','?')} | "
+                    f"{info.get('equipment_desc','?')} | {info.get('set_desc','?')} | {start.date()} to {end.date()} "
+                    f"({duration} days, Q{qtr} {start.year})"
+                )
 
-    full_message = "\n".join(message_lines)
-    print("\n" + full_message)
-    if "🟥" in full_message or "🟩" in full_message:
-        requests.post(NTFY_URL, data=full_message.encode("utf-8"))
-
-
-
-
+    final = "\n".join(lines)
+    print("\n" + final)
+    if "🟥" in final or "🟩" in final:
+        requests.post(NTFY_URL, data=final.encode("utf-8"))
 
 def run_scheduler(test_mode=False):
     if test_mode:
