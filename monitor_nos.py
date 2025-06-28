@@ -124,6 +124,15 @@ def compare_outages(df_old, df_new):
     # Load mapping once
     substation_to_state = load_neo_mapping()
 
+    def parse_datetime_safe(val):
+        try:
+            # Remove junk like COMP or quotes/commas
+            val_clean = str(val).strip().replace('"', '').replace(',', '')
+            val_clean = val_clean.split()[0] + " " + val_clean.split()[1].split("C")[0]
+            return pd.to_datetime(val_clean, errors="coerce", dayfirst=False)
+        except Exception:
+            return pd.NaT
+
     old_ids = set(df_old["OUTAGEID"])
     new_ids = set(df_new["OUTAGEID"])
 
@@ -142,13 +151,10 @@ def compare_outages(df_old, df_new):
                 for substation, group_sub in group_state.groupby("SUBSTATIONID"):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
-                        try:
-                            start_str = str(row["STARTTIME"]).strip().replace('"', '').replace(',', '')
-                            end_str = str(row["ENDTIME"]).strip().replace('"', '').replace(',', '')
-                            start = pd.to_datetime(start_str, errors="raise")
-                            end = pd.to_datetime(end_str, errors="raise")
-                        except Exception:
-                            continue  # Skip rows with bad datetime
+                        start = parse_datetime_safe(row["STARTTIME"])
+                        end = parse_datetime_safe(row["ENDTIME"])
+                        if pd.isna(start) or pd.isna(end):
+                            continue
                         duration = (end - start).days + 1
                         qtr = (start.month - 1) // 3 + 1
                         message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
@@ -160,13 +166,10 @@ def compare_outages(df_old, df_new):
                 for substation, group_sub in group_state.groupby("SUBSTATIONID"):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
-                        try:
-                            start_str = str(row["STARTTIME"]).strip().replace('"', '').replace(',', '')
-                            end_str = str(row["ENDTIME"]).strip().replace('"', '').replace(',', '')
-                            start = pd.to_datetime(start_str, errors="raise")
-                            end = pd.to_datetime(end_str, errors="raise")
-                        except Exception:
-                            continue  # Skip rows with bad datetime
+                        start = parse_datetime_safe(row["STARTTIME"])
+                        end = parse_datetime_safe(row["ENDTIME"])
+                        if pd.isna(start) or pd.isna(end):
+                            continue
                         duration = (end - start).days + 1
                         qtr = (start.month - 1) // 3 + 1
                         message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
@@ -175,6 +178,7 @@ def compare_outages(df_old, df_new):
     print("\n" + full_message)
     if "🟥" in full_message or "🟩" in full_message:
         requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+
 
 
 
