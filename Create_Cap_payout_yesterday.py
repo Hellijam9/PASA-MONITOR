@@ -5,6 +5,10 @@ from io import StringIO
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
+# Create_Cap_payout_yesterday.py
+# Fetches full 24h of Neopoint Region Cap payout data for yesterday
+# and posts a consolidated ntfy message to topic "Cap_yesterday".
+
 # ── CONFIG ─────────────────────────────────────────
 NTFY_TOPIC     = "Cap_yesterday"
 NTFY_URL       = f"https://ntfy.sh/{NTFY_TOPIC}"
@@ -40,12 +44,14 @@ def fetch_region_data(instance, from_ts):
 
 def compute_region_payout(df):
     """
-    Sum the interval payouts directly. Assumes each non-DateTime column
-    represents payout per interval. Returns total payout over 24h.
+    Sum the interval payouts with scaling. Assumes each non-DateTime column
+    represents the payout value for that 5-min interval. Multiplies each
+    by INTERVAL_HOURS (5/60 h) and sums to return total payout over 24h.
     """
     total = 0.0
     for col in df.columns:
         if col != "DateTime":
+            # multiply each interval's payout by hours per interval
             total += df[col].sum() * INTERVAL_HOURS
     return total
 
@@ -57,6 +63,7 @@ def main():
 
     for instance in REGION_INSTANCES:
         df = fetch_region_data(instance, yesterday_ts)
+        # Label without digits (e.g., NSW1 -> NSW)
         region_label = ''.join(filter(str.isalpha, instance))
         payout = compute_region_payout(df)
         results[region_label] = payout
