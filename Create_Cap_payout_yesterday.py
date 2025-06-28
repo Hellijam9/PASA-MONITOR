@@ -10,8 +10,8 @@ from urllib.parse import quote
 # and posts a consolidated ntfy message to topic "Cap_yesterday".
 
 # ── CONFIG ─────────────────────────────────────────
-NTFY_TOPIC     = "Cap_yesterday"
-NTFY_URL       = "https://ntfy.sh/{cap_yesterday}"
+NTFY_TOPIC     = "cap_yesterday"
+NTFY_URL       = "https://ntfy.sh/{NTFY_TOPIC}"
 INTERVAL_HOURS = 5/60  # hours per 5-minute interval
 
 # List of region instances
