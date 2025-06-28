@@ -60,8 +60,8 @@ def load_neo_mapping():
         url = tmpl.format(today=today)
         try:
             df = pd.read_csv(url, header=None, encoding="utf-8", on_bad_lines='skip')
-            # Filter numeric Outage IDs
-            df = df[df[2].astype(str).str.match(r'^\d+$')]
+            # Filter numeric Outage IDs (strip whitespace)
+            df = df[df[2].astype(str).str.strip().str.match(r'^\d+$')]
             print(f"📊 {region} rows: {len(df)}")
             for _, r in df.iterrows():
                 oid = r[2].strip().lstrip("0")
