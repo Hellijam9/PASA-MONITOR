@@ -48,7 +48,6 @@ def send_ntfy(msg):
     resp = requests.post(NTFY_URL, data=msg.encode("utf-8"))
     print(f"ntfy response: {resp.status_code} {resp.text.strip()}")
 
-
 # ── MAIN ──────────────────────────────────────────
 def main():
     mapping = load_mapping()
@@ -56,43 +55,37 @@ def main():
         print("⚠️ No matching DUIDs—check your plant CSV.")
         return
 
-    # load or initialize state
     if os.path.exists(STATE_FILE):
-        seen = pd.read_csv(STATE_FILE)
+        seen_full = pd.read_csv(STATE_FILE)
+        seen = seen_full[["DUID", "TIME", "REGION"]]  # Slim copy for safe merge
     else:
-        seen = pd.DataFrame(columns=["DUID","TIME","REGION"])
+        seen_full = pd.DataFrame(columns=["DUID", "TIME", "REGION", "REASON"])
+        seen = seen_full[["DUID", "TIME", "REGION"]]
 
     all_new = []
 
     for region, url in REDBID_URLS.items():
         df = fetch_rebids(url)
 
-        # 1) Literal DUID
         if "DUID" not in df.columns:
             print(f"❌ No DUID column in {region} CSV; got: {df.columns.tolist()}")
             continue
 
-        # 2) Literal OFFERDATE as TIME
         if "OFFERDATE" not in df.columns:
             print(f"❌ 'OFFERDATE' missing in {region} CSV; got: {df.columns.tolist()}")
             continue
 
-        # 3) Literal REBIDEXPLANATION as REASON
         if "REBIDEXPLANATION" not in df.columns:
             print(f"❌ 'REBIDEXPLANATION' missing in {region} CSV; got: {df.columns.tolist()}")
             continue
 
-        # build subset & rename
         sub = df[["DUID","OFFERDATE","REBIDEXPLANATION"]].rename(
             columns={"OFFERDATE":"TIME","REBIDEXPLANATION":"REASON"}
         )
         sub["DUID"]   = sub["DUID"].astype(str).str.upper().str.strip()
         sub["REGION"] = region
-
-        # filter to your fuel-type DUIDs
         sub = sub[sub["DUID"].isin(mapping["DUID"])]
 
-        # ✅ PATCHED LINE: handle REASON column conflict
         merged = sub.merge(seen, on=["DUID","TIME","REGION"], how="left", indicator=True, suffixes=('', '_old'))
         new    = merged[merged["_merge"]=="left_only"].drop(columns="_merge")
 
@@ -100,7 +93,6 @@ def main():
         if not new.empty:
             all_new.append((region, new))
 
-    # send alerts if any
     if all_new:
         lines = []
         for region, df_new in all_new:
@@ -114,8 +106,7 @@ def main():
     else:
         print("No new rebids detected.")
 
-    # update state file
-    updated = pd.concat([seen] + [n for _, n in all_new], ignore_index=True)
+    updated = pd.concat([seen_full] + [n for _, n in all_new], ignore_index=True)
     updated.drop_duplicates(["DUID","TIME","REGION"], inplace=True)
     updated.to_csv(STATE_FILE, index=False)
     print(f"State file updated: {len(updated)} entries.")
