@@ -17,12 +17,13 @@ NEO_CSV_LINKS = {
     "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=SA1&section=-1&key=gfi2016"
 }
 
-neo_details = {}  # OUTAGEID → metadata dict
-
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
+
+    # Deduplicate file matches from HTML
     matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
+
     if len(matches) < 30:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -41,6 +42,22 @@ def fetch_latest_two_urls():
 
     return BASE_URL + files_with_times[29][1], BASE_URL + files_with_times[0][1]
 
+
+
+
+    df.columns = [
+        "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
+        "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
+        "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
+        "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
+        "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
+    ][:df.shape[1]]
+
+    # Clean OUTAGEID to ensure consistent matching
+    df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
+
+    return df
+    
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
@@ -65,6 +82,7 @@ def extract_csv(url):
                 "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
             ][:df.shape[1]]
 
+            # Optional cleanup
             df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
             df["SUBSTATIONID"] = df["SUBSTATIONID"].astype(str).str.strip()
             df["STARTTIME"] = df["STARTTIME"].astype(str).str.replace("COMP", "", regex=False)
@@ -72,34 +90,47 @@ def extract_csv(url):
 
             return df
 
+
+
+
 def load_neo_mapping():
-    global neo_details
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
-    for _, url_template in NEO_CSV_LINKS.items():
+    substation_to_state = {}
+
+    for state_code, url_template in NEO_CSV_LINKS.items():
         url = url_template.format(today=today)
         try:
             df = pd.read_csv(url)
-            for _, row in df.iterrows():
-                outage_id = str(row.iloc[2]).strip()
-                neo_details[outage_id] = {
-                    "substation_desc": str(row.iloc[6]).strip(),
-                    "equipment_desc": str(row.iloc[9]).strip(),
-                    "set_desc": str(row.iloc[11]).strip(),
-                    "state": str(row.iloc[3]).strip(),
-                    "owner": str(row.iloc[4]).strip(),
-                }
-        except:
-            continue
 
+            # Using column indexes (based on your CSVs)
+            # Assume:  substationid at col 6, state is from state_code key directly
+            # Just map substationid to state_code
+            # Defensive check for required column index
+            if df.shape[1] < 7:
+                print(f"⚠️ NeoPoint CSV for {state_code} missing expected columns, skipping")
+                continue
+
+            # Column index 6 is substationid based on your examples (0-based)
+            # Loop rows to build dict
+            for substation_id in df.iloc[:,6].dropna().unique():
+                substation_to_state[substation_id] = state_code
+
+        except Exception as e:
+            print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
+
+    return substation_to_state
+    
 def compare_outages(df_old, df_new):
-    load_neo_mapping()
+    # Load mapping once
+    substation_to_state = load_neo_mapping()
 
     def parse_datetime_safe(val):
         try:
+            # Remove junk like COMP or quotes/commas
             val_clean = str(val).strip().replace('"', '').replace(',', '')
             val_clean = val_clean.split()[0] + " " + val_clean.split()[1].split("C")[0]
             return pd.to_datetime(val_clean, errors="coerce", dayfirst=False)
-        except:
+        except Exception:
             return pd.NaT
 
     old_ids = set(df_old["OUTAGEID"])
@@ -114,41 +145,47 @@ def compare_outages(df_old, df_new):
         message_lines.append("No new or cleared network outages detected.")
     else:
         if not added.empty:
-            message_lines.append(f"🔵 {len(added)} new outages:")
-            for _, row in added.iterrows():
-                start = parse_datetime_safe(row["STARTTIME"])
-                end = parse_datetime_safe(row["ENDTIME"])
-                if pd.isna(start) or pd.isna(end):
-                    continue
-                duration = (end - start).days + 1
-                qtr = (start.month - 1) // 3 + 1
-                info = neo_details.get(row["OUTAGEID"], {})
-                message_lines.append(
-                    f"  {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year}) | "
-                    f"{info.get('equipment_desc','')} | {info.get('set_desc','')} | {info.get('state','UNKNOWN')} | {info.get('owner','')}")
+            message_lines.append(f"🟥 {len(added)} new outages:")
+            for state, group_state in added.groupby(lambda r: substation_to_state.get(added.loc[r, "SUBSTATIONID"], "UNKNOWN")):
+                message_lines.append(f"\nState: {state}")
+                for substation, group_sub in group_state.groupby("SUBSTATIONID"):
+                    message_lines.append(f"  Substation: {substation}")
+                    for _, row in group_sub.iterrows():
+                        start = parse_datetime_safe(row["STARTTIME"])
+                        end = parse_datetime_safe(row["ENDTIME"])
+                        if pd.isna(start) or pd.isna(end):
+                            continue
+                        duration = (end - start).days + 1
+                        qtr = (start.month - 1) // 3 + 1
+                        message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
 
         if not removed.empty:
-            message_lines.append(f"\n🔺 {len(removed)} cleared outages:")
-            for _, row in removed.iterrows():
-                start = parse_datetime_safe(row["STARTTIME"])
-                end = parse_datetime_safe(row["ENDTIME"])
-                if pd.isna(start) or pd.isna(end):
-                    continue
-                duration = (end - start).days + 1
-                qtr = (start.month - 1) // 3 + 1
-                info = neo_details.get(row["OUTAGEID"], {})
-                message_lines.append(
-                    f"  {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year}) | "
-                    f"{info.get('equipment_desc','')} | {info.get('set_desc','')} | {info.get('state','UNKNOWN')} | {info.get('owner','')}")
+            message_lines.append(f"\n🟩 {len(removed)} cleared outages:")
+            for state, group_state in removed.groupby(lambda r: substation_to_state.get(removed.loc[r, "SUBSTATIONID"], "UNKNOWN")):
+                message_lines.append(f"\nState: {state}")
+                for substation, group_sub in group_state.groupby("SUBSTATIONID"):
+                    message_lines.append(f"  Substation: {substation}")
+                    for _, row in group_sub.iterrows():
+                        start = parse_datetime_safe(row["STARTTIME"])
+                        end = parse_datetime_safe(row["ENDTIME"])
+                        if pd.isna(start) or pd.isna(end):
+                            continue
+                        duration = (end - start).days + 1
+                        qtr = (start.month - 1) // 3 + 1
+                        message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
 
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
-    if "🔵" in full_message or "🔺" in full_message:
+    if "🟥" in full_message or "🟩" in full_message:
         requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+
+
+
+
 
 def run_scheduler(test_mode=False):
     if test_mode:
-        print("🧚 Running in TEST mode – simulating now.")
+        print("🧪 Running in TEST mode – simulating now.")
     else:
         tz = pytz.timezone("Australia/Sydney")
         now = datetime.now(tz)
