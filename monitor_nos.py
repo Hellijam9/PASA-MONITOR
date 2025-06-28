@@ -99,6 +99,7 @@ def load_neo_mapping():
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
     return substation_to_state
+    
 def compare_outages(df_old, df_new):
     # Load mapping once
     substation_to_state = load_neo_mapping()
@@ -122,8 +123,10 @@ def compare_outages(df_old, df_new):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
                         try:
-                            start = pd.to_datetime(row["STARTTIME"], errors="raise")
-                            end = pd.to_datetime(row["ENDTIME"], errors="raise")
+                            start_str = str(row["STARTTIME"]).strip().replace('"', '').replace(',', '')
+                            end_str = str(row["ENDTIME"]).strip().replace('"', '').replace(',', '')
+                            start = pd.to_datetime(start_str, errors="raise")
+                            end = pd.to_datetime(end_str, errors="raise")
                         except Exception:
                             continue  # Skip rows with bad datetime
                         duration = (end - start).days + 1
@@ -138,8 +141,10 @@ def compare_outages(df_old, df_new):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
                         try:
-                            start = pd.to_datetime(row["STARTTIME"], errors="raise")
-                            end = pd.to_datetime(row["ENDTIME"], errors="raise")
+                            start_str = str(row["STARTTIME"]).strip().replace('"', '').replace(',', '')
+                            end_str = str(row["ENDTIME"]).strip().replace('"', '').replace(',', '')
+                            start = pd.to_datetime(start_str, errors="raise")
+                            end = pd.to_datetime(end_str, errors="raise")
                         except Exception:
                             continue  # Skip rows with bad datetime
                         duration = (end - start).days + 1
