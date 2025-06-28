@@ -43,31 +43,27 @@ def fetch_latest_two_urls():
     return BASE_URL + files_with_times[29][1], BASE_URL + files_with_times[0][1]
 
 
-
-
-
-
-def extract_csv(url):
-    print(f"Downloading: {url}")
-    r = requests.get(url)
-    r.raise_for_status()
-    with zipfile.ZipFile(BytesIO(r.content)) as z:
+def extract_csv(filepath):
+    print(f"✅ Extracting: {filepath}")
+    with zipfile.ZipFile(BytesIO(requests.get(filepath).content)) as z:
         file_name = z.namelist()[0]
-        print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            # Read CSV with proper parsing of quoted fields
-            df = pd.read_csv(f, header=None)
+            df = pd.read_csv(f, engine="python", quotechar='"', skipinitialspace=True)
 
-            df.columns = [
-                "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
-                "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
-                "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
-                "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
-                "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-            ][:df.shape[1]]  # Trim to available columns
+    # Keep only rows that start with 'D'
+    df = df[df.iloc[:, 0] == "D"].copy()
 
-            # Filter only data lines
-            return df[df["RECTYPE"] == "D"]
+    # Rename known columns (up to the number in the frame)
+    df.columns = [
+        "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
+        "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
+        "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
+        "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
+        "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
+    ][:df.shape[1]]
+
+    return df
+
 
 
 def load_neo_mapping():
