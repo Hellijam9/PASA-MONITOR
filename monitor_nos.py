@@ -134,17 +134,6 @@ def compare_outages(old, new):
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
 
 # Entry point
-def run_scheduler(test=False):
-    if test:
-        print("🧪 Running in TEST mode – simulating now.")
-    else:
-        print(f"🕒 Current AEST Time: {datetime.now(pytz.timezone('Australia/Sydney'))}")
-    try:
-        u1, u2 = fetch_latest_two_urls()
-        df1, df2 = extract_csv(u1), extract_csv(u2)
-        compare_outages(df1, df2)
-    except Exception as ex:
-        print(f"❌ ERROR: {ex}")
-
 if __name__ == "__main__":
-    run_scheduler("
+    # Pass True to run in test mode
+    run_scheduler(test=("--test" in sys.argv))
