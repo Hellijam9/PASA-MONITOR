@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 # ── CONFIG ─────────────────────────────────────────
 NTFY_TOPIC     = "Cap_yesterday"
-NTFY_URL       = f"https://ntfy.sh/{cap_yesterday}"
+NTFY_URL       = "https://ntfy.sh/{cap_yesterday}"
 INTERVAL_HOURS = 5/60  # hours per 5-minute interval
 
 # List of region instances
