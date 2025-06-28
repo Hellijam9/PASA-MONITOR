@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 # ── CONFIG ─────────────────────────────────────────
 NTFY_TOPIC     = "Cap_yesterday"
-NTFY_URL       = f"https://ntfy.sh/{NTFY_TOPIC}"
+NTFY_URL       = f"https://ntfy.sh/{cap_yesterday}"
 INTERVAL_HOURS = 5/60  # hours per 5-minute interval
 
 # List of region instances
@@ -44,15 +44,15 @@ def fetch_region_data(instance, from_ts):
 
 def compute_region_payout(df):
     """
-    Sum the interval payouts with scaling. Assumes each non-DateTime column
-    represents the payout value for that 5-min interval. Multiplies each
-    by INTERVAL_HOURS (5/60 h) and sums to return total payout over 24h.
+    Applies INTERVAL_HOURS multiplication to each payout value, then sums.
+    Assumes each non-DateTime column is the payout for that 5-min interval.
     """
     total = 0.0
     for col in df.columns:
         if col != "DateTime":
-            # multiply each interval's payout by hours per interval
-            total += df[col].sum() * INTERVAL_HOURS
+            # multiply each interval's payout by hours per interval, then sum
+            interval_series = df[col] * INTERVAL_HOURS
+            total += interval_series.sum()
     return total
 
 
@@ -63,7 +63,6 @@ def main():
 
     for instance in REGION_INSTANCES:
         df = fetch_region_data(instance, yesterday_ts)
-        # Label without digits (e.g., NSW1 -> NSW)
         region_label = ''.join(filter(str.isalpha, instance))
         payout = compute_region_payout(df)
         results[region_label] = payout
