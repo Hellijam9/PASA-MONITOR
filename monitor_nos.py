@@ -10,7 +10,8 @@ import sys
 BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
 NTFY_URL = "https://ntfy.sh/outage-alerts"
 
-# NeoPoint CSV links with Two Years period\NEO_CSV_LINKS = {
+# NeoPoint CSV links with Two Years period
+NEO_CSV_LINKS = {
     "NSW1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=NSW1&section=-5&key=gfi2016",
     "QLD1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=QLD1&section=-5&key=gfi2016",
     "VIC1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=VIC1&section=-5&key=gfi2016",
