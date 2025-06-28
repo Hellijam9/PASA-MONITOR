@@ -99,7 +99,6 @@ def load_neo_mapping():
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
     return substation_to_state
-
 def compare_outages(df_old, df_new):
     # Load mapping once
     substation_to_state = load_neo_mapping()
@@ -117,14 +116,16 @@ def compare_outages(df_old, df_new):
     else:
         if not added.empty:
             message_lines.append(f"🟥 {len(added)} new outages:")
-            # Group by state, then substation
             for state, group_state in added.groupby(lambda r: substation_to_state.get(added.loc[r, "SUBSTATIONID"], "UNKNOWN")):
                 message_lines.append(f"\nState: {state}")
                 for substation, group_sub in group_state.groupby("SUBSTATIONID"):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
-                        start = pd.to_datetime(row["STARTTIME"])
-                        end = pd.to_datetime(row["ENDTIME"])
+                        try:
+                            start = pd.to_datetime(row["STARTTIME"], errors="raise")
+                            end = pd.to_datetime(row["ENDTIME"], errors="raise")
+                        except Exception:
+                            continue  # Skip rows with bad datetime
                         duration = (end - start).days + 1
                         qtr = (start.month - 1) // 3 + 1
                         message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
@@ -136,8 +137,11 @@ def compare_outages(df_old, df_new):
                 for substation, group_sub in group_state.groupby("SUBSTATIONID"):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
-                        start = pd.to_datetime(row["STARTTIME"])
-                        end = pd.to_datetime(row["ENDTIME"])
+                        try:
+                            start = pd.to_datetime(row["STARTTIME"], errors="raise")
+                            end = pd.to_datetime(row["ENDTIME"], errors="raise")
+                        except Exception:
+                            continue  # Skip rows with bad datetime
                         duration = (end - start).days + 1
                         qtr = (start.month - 1) // 3 + 1
                         message_lines.append(f"    {row['EQUIPMENTTYPE']} {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year})")
@@ -146,6 +150,8 @@ def compare_outages(df_old, df_new):
     print("\n" + full_message)
     if "🟥" in full_message or "🟩" in full_message:
         requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+
+
 
 
 def run_scheduler(test_mode=False):
