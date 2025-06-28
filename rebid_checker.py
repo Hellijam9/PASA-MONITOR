@@ -45,7 +45,9 @@ def fetch_rebids(url):
 
 def send_ntfy(msg):
     print("🔔 Sending ntfy alert:\n" + msg + "\n")
-    requests.post(NTFY_URL, data=msg.encode("utf-8"))
+    resp = requests.post(NTFY_URL, data=msg.encode("utf-8"))
+    print(f"ntfy response: {resp.status_code} {resp.text.strip()}")
+
 
 # ── MAIN ──────────────────────────────────────────
 def main():
