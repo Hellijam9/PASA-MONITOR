@@ -24,16 +24,16 @@ def fetch_latest_two_urls():
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
-    def extract_dt(filename):
-        m = re.search(r'PUBLIC_NETWORK_(\d{14})_', filename)
+    def extract_dt(fn):
+        m = re.search(r'PUBLIC_NETWORK_(\d{14})_', fn)
         return datetime.strptime(m.group(1), "%Y%m%d%H%M%S") if m else datetime.min
 
-    files_with_times = [(extract_dt(f), f) for f in matches]
-    files_with_times.sort(reverse=True)
+    items = [(extract_dt(fn), fn) for fn in matches]
+    items.sort(reverse=True)
     print("📂 Top 5 files sorted by timestamp:")
-    for ts, f in files_with_times[:5]:
-        print(f"  {ts}  →  {f}")
-    return BASE_URL + files_with_times[1][1], BASE_URL + files_with_times[0][1]
+    for ts, fn in items[:5]:
+        print(f"  {ts}  →  {fn}")
+    return BASE_URL + items[1][1], BASE_URL + items[0][1]
 
 def extract_csv(url):
     print(f"Downloading: {url}")
@@ -46,30 +46,31 @@ def extract_csv(url):
             df = pd.read_csv(f, header=None, skiprows=2)
             df.columns = list(range(df.shape[1]))
             df[4] = df[4].astype(str).str.strip().str.lstrip("0")
-            print(f"🔎 Sample outage IDs from {fn}: {df[4].dropna().unique()[:5]}")
+            print(f"🔎 Sample outage IDs: {df[4].dropna().unique()[:5]}")
             return df
 
 def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
     mapping = {}
-    for state, tmpl in NEO_CSV_LINKS.items():
+    for region, tmpl in NEO_CSV_LINKS.items():
         url = tmpl.format(today=today)
         try:
             df = pd.read_csv(url, header=None, encoding="utf-8", on_bad_lines='skip')
-            # Keep only rows where column 2 is a numeric Outage ID
+            # skip header row starting with non-numeric
             df = df[df[2].astype(str).str.match(r'^\d+$')]
-            for _, row in df.iterrows():
-                oid = row[2].strip().lstrip("0")
+            print(f"📊 {region} rows with numeric IDs: {len(df)}")
+            for _, r in df.iterrows():
+                oid = r[2].strip().lstrip("0")
                 mapping[oid] = {
-                    "state": str(row[3]).strip(),
-                    "owner": str(row[4]).strip(),
-                    "substation_desc": str(row[6]).strip(),
-                    "equipment_desc": str(row[9]).strip(),
-                    "set_desc": str(row[11]).strip()
+                    "state": str(r[3]).strip(),
+                    "owner": str(r[4]).strip(),
+                    "substation_desc": str(r[6]).strip(),
+                    "equipment_desc": str(r[9]).strip(),
+                    "set_desc": str(r[11]).strip()
                 }
         except Exception as e:
-            print(f"⚠️ Failed loading NeoPoint {state}: {e}")
-    print(f"📦 NeoPoint mapping loaded with {len(mapping)} outage IDs")
+            print(f"⚠️ NeoPoint {region} load error: {e}")
+    print(f"📦 NeoPoint mapping count: {len(mapping)} IDs")
     return mapping
 
 def parse_dt(v):
@@ -82,37 +83,33 @@ def compare_outages(old, new):
     col = 4
     old[col] = old[col].astype(str).str.strip().str.lstrip("0")
     new[col] = new[col].astype(str).str.strip().str.lstrip("0")
-    oids = set(old[col])
-    nids = set(new[col])
+    oids, nids = set(old[col]), set(new[col])
     print(f"🔁 Comparing {len(oids)} old vs {len(nids)} new IDs")
-    added = nids - oids
-    removed = oids - nids
+    added, removed = nids - oids, oids - nids
     if not added and not removed:
         print("No new or cleared network outages detected.")
         return
-    print(f"🟥 New: {len(added)}")
-    print(f"🟩 Cleared: {len(removed)}")
-    md = load_neo_mapping()
-    lines = []
+    print(f"🟥 New: {len(added)} | 🟩 Cleared: {len(removed)}")
+    meta = load_neo_mapping()
+    out = []
     for label, ids, df_ in [("🟥", added, new), ("🟩", removed, old)]:
         if ids:
-            lines.append(f"{label} {len(ids)} outages:")
+            out.append(f"{label} {len(ids)} outages:")
             for oid in ids:
                 row = df_[df_[col] == oid]
                 if row.empty: continue
                 r = row.iloc[0]
-                s = parse_dt(r[9])
-                e = parse_dt(r[10])
+                s, e = parse_dt(r[9]), parse_dt(r[10])
                 dur = max((e - s).days + 1, 0) if pd.notna(s) and pd.notna(e) else "?"
-                q = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
-                info = md.get(oid, {})
-                lines.append(
+                qtr = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
+                info = meta.get(oid, {})
+                out.append(
                     f"  {info.get('state','?')} | {info.get('owner','?')} | {info.get('substation_desc','?')} | "
                     f"{info.get('equipment_desc','?')} | {info.get('set_desc','?')} | "
                     f"{s.date() if pd.notna(s) else '?'} to {e.date() if pd.notna(e) else '?'} "
-                    f"({dur} days, Q{q} {s.year if pd.notna(s) else '?'})"
+                    f"({dur} days, Q{qtr} {s.year if pd.notna(s) else '?'})"
                 )
-    msg = "\n".join(lines)
+    msg = "\n".join(out)
     print("\n" + msg)
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
 
@@ -124,8 +121,7 @@ def run_scheduler(test=False):
         print(f"🕒 Current AEST Time: {now}")
     try:
         u1, u2 = fetch_latest_two_urls()
-        df1 = extract_csv(u1)
-        df2 = extract_csv(u2)
+        df1, df2 = extract_csv(u1), extract_csv(u2)
         compare_outages(df1, df2)
     except Exception as ex:
         print(f"❌ ERROR: {ex}")
