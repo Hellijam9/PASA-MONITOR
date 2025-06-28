@@ -10,16 +10,14 @@ import sys
 BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
 NTFY_URL = "https://ntfy.sh/outage-alerts"
 
+# Corrected NeoPoint CSV links with Two Years period
 NEO_CSV_LINKS = {
     "NSW1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=NSW1&section=-5&key=gfi2016",
     "QLD1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=QLD1&section=-5&key=gfi2016",
     "VIC1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=VIC1&section=-5&key=gfi2016",
     "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=SA1&section=-5&key=gfi2016"
-}%2000%3A00&period=Daily&instances=NSW1&section=-1&key=gfi2016",
-    "QLD1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=QLD1&section=-1&key=gfi2016",
-    "VIC1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=VIC1&section=-1&key=gfi2016",
-    "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=SA1&section=-1&key=gfi2016"
 }
+
 
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
@@ -39,6 +37,7 @@ def fetch_latest_two_urls():
         print(f"  {ts}  →  {fn}")
     return BASE_URL + items[1][1], BASE_URL + items[0][1]
 
+
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
@@ -53,6 +52,7 @@ def extract_csv(url):
             print(f"🔎 Sample outage IDs: {df[4].dropna().unique()[:5]}")
             return df
 
+
 def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
     mapping = {}
@@ -60,9 +60,9 @@ def load_neo_mapping():
         url = tmpl.format(today=today)
         try:
             df = pd.read_csv(url, header=None, encoding="utf-8", on_bad_lines='skip')
-            # skip header row starting with non-numeric
+            # Filter numeric Outage IDs
             df = df[df[2].astype(str).str.match(r'^\d+$')]
-            print(f"📊 {region} rows with numeric IDs: {len(df)}")
+            print(f"📊 {region} rows: {len(df)}")
             for _, r in df.iterrows():
                 oid = r[2].strip().lstrip("0")
                 mapping[oid] = {
@@ -77,11 +77,13 @@ def load_neo_mapping():
     print(f"📦 NeoPoint mapping count: {len(mapping)} IDs")
     return mapping
 
+
 def parse_dt(v):
     try:
         return pd.to_datetime(str(v).replace("COMP", "").strip(), errors="coerce")
     except:
         return pd.NaT
+
 
 def compare_outages(old, new):
     col = 4
@@ -95,10 +97,10 @@ def compare_outages(old, new):
         return
     print(f"🟥 New: {len(added)} | 🟩 Cleared: {len(removed)}")
     meta = load_neo_mapping()
-    out = []
+    lines = []
     for label, ids, df_ in [("🟥", added, new), ("🟩", removed, old)]:
         if ids:
-            out.append(f"{label} {len(ids)} outages:")
+            lines.append(f"{label} {len(ids)} outages:")
             for oid in ids:
                 row = df_[df_[col] == oid]
                 if row.empty: continue
@@ -107,15 +109,16 @@ def compare_outages(old, new):
                 dur = max((e - s).days + 1, 0) if pd.notna(s) and pd.notna(e) else "?"
                 qtr = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
                 info = meta.get(oid, {})
-                out.append(
+                lines.append(
                     f"  {info.get('state','?')} | {info.get('owner','?')} | {info.get('substation_desc','?')} | "
                     f"{info.get('equipment_desc','?')} | {info.get('set_desc','?')} | "
                     f"{s.date() if pd.notna(s) else '?'} to {e.date() if pd.notna(e) else '?'} "
                     f"({dur} days, Q{qtr} {s.year if pd.notna(s) else '?'})"
                 )
-    msg = "\n".join(out)
+    msg = "\n".join(lines)
     print("\n" + msg)
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
+
 
 def run_scheduler(test=False):
     if test:
@@ -125,7 +128,8 @@ def run_scheduler(test=False):
         print(f"🕒 Current AEST Time: {now}")
     try:
         u1, u2 = fetch_latest_two_urls()
-        df1, df2 = extract_csv(u1), extract_csv(u2)
+        df1 = extract_csv(u1)
+        df2 = extract_csv(u2)
         compare_outages(df1, df2)
     except Exception as ex:
         print(f"❌ ERROR: {ex}")
