@@ -109,7 +109,7 @@ def compare_outages(old, new):
                 s = parse_dt(r[9])
                 e = parse_dt(r[10])
                 info = meta.get(oid)
-                                if not info:
+                if not info:
                     # For cleared outages, use actual start/end from AEMO
                     s = parse_dt(r[19])
                     e = parse_dt(r[20])
@@ -120,7 +120,7 @@ def compare_outages(old, new):
                         "equipment_desc": f"{r[6]} {r[7]}",  # EQUIPMENTTYPE + EQUIPMENTID
                         "set_desc": r[17]  # REASON from AEMO
                     }
-                # compute duration and quarter once dates set and quarter once dates set
+                # compute duration and quarter once dates set
                 dur = max((e - s).days + 1, 0) if pd.notna(s) and pd.notna(e) else "?"
                 qtr = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
                 lines.append(
@@ -147,4 +147,4 @@ def run_scheduler(test=False):
         print(f"❌ ERROR: {ex}")
 
 if __name__ == "__main__":
-    run_scheduler("--test" in sys.argv)
+    run_scheduler("
