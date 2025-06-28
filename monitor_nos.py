@@ -10,8 +10,7 @@ import sys
 BASE_URL = "https://www.nemweb.com.au/Reports/CURRENT/Network/"
 NTFY_URL = "https://ntfy.sh/outage-alerts"
 
-# NeoPoint CSV links with Two Years period
-NEO_CSV_LINKS = {
+# NeoPoint CSV links with Two Years period\NEO_CSV_LINKS = {
     "NSW1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=NSW1&section=-5&key=gfi2016",
     "QLD1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=QLD1&section=-5&key=gfi2016",
     "VIC1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Two%20Years&instances=VIC1&section=-5&key=gfi2016",
@@ -102,14 +101,17 @@ def compare_outages(old, new):
             lines.append(f"{label} {len(ids)} outages:")
             for oid in ids:
                 row = df_[df_[col] == oid]
-                if row.empty: continue
+                if row.empty:
+                    continue
                 r = row.iloc[0]
-                s, e = parse_dt(r[9]), parse_dt(r[10])
-                dur = max((e - s).days + 1, 0) if pd.notna(s) and pd.notna(e) else "?"
-                qtr = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
+                # choose appropriate date fields
+                s = parse_dt(r[9])
+                e = parse_dt(r[10])
                 info = meta.get(oid)
                 if not info:
-                    # Fallback to AEMO data
+                    # For cleared outages, use actual start/end from AEMO
+                    s = parse_dt(r[19])
+                    e = parse_dt(r[20])
                     info = {
                         "state": "AEMO",
                         "owner": "AEMO",
@@ -117,6 +119,9 @@ def compare_outages(old, new):
                         "equipment_desc": f"{r[7]} {r[8]}",
                         "set_desc": r[17]
                     }
+                # compute duration and quarter once dates set
+                dur = max((e - s).days + 1, 0) if pd.notna(s) and pd.notna(e) else "?"
+                qtr = (s.month - 1)//3 + 1 if pd.notna(s) else "?"
                 lines.append(
                     f"  {info['state']} | {info['owner']} | {info['substation_desc']} | "
                     f"{info['equipment_desc']} | {info['set_desc']} | "
@@ -129,7 +134,9 @@ def compare_outages(old, new):
 
 # Entry point
 def run_scheduler(test=False):
-    print("🧪 Running in TEST mode – simulating now.") if test else \
+    if test:
+        print("🧪 Running in TEST mode – simulating now.")
+    else:
         print(f"🕒 Current AEST Time: {datetime.now(pytz.timezone('Australia/Sydney'))}")
     try:
         u1, u2 = fetch_latest_two_urls()
