@@ -22,7 +22,6 @@ def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
     matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
-
     if len(matches) < 2:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -50,8 +49,8 @@ def extract_csv(url):
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
             df = pd.read_csv(f, header=None, skiprows=2)
-            df.columns = list(range(df.shape[1]))  # Ensure consistent integer columns
-            df[4] = df[4].astype(str).str.strip()  # Outage ID column (E = index 4)
+            df.columns = list(range(df.shape[1]))
+            df[4] = df[4].astype(str).str.strip().str.lstrip("0")
             print(f"🔎 Sample outage IDs from {file_name}: {df[4].dropna().unique()[:5]}")
             return df
 
@@ -64,7 +63,7 @@ def load_neo_mapping():
         try:
             df = pd.read_csv(url, skiprows=1, header=None)
             for _, row in df.iterrows():
-                outage_id = str(row[2]).strip()
+                outage_id = str(row[2]).strip().lstrip("0")
                 mapping[outage_id] = {
                     "state": row[3],
                     "owner": row[4],
@@ -75,12 +74,22 @@ def load_neo_mapping():
         except Exception as e:
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
+    print(f"📦 NeoPoint mapping loaded with {len(mapping)} outage IDs")
     return mapping
 
+def parse_dt(val):
+    try:
+        return pd.to_datetime(str(val).replace("COMP", "").strip(), errors="coerce")
+    except:
+        return pd.NaT
+
 def compare_outages(df_old, df_new):
-    outage_col = 4  # Column E
-    old_ids = set(df_old[outage_col].astype(str).str.strip())
-    new_ids = set(df_new[outage_col].astype(str).str.strip())
+    outage_col = 4
+    df_old[outage_col] = df_old[outage_col].astype(str).str.strip().str.lstrip("0")
+    df_new[outage_col] = df_new[outage_col].astype(str).str.strip().str.lstrip("0")
+
+    old_ids = set(df_old[outage_col])
+    new_ids = set(df_new[outage_col])
 
     print(f"🔁 Comparing {len(old_ids)} old IDs vs {len(new_ids)} new IDs")
 
@@ -100,19 +109,39 @@ def compare_outages(df_old, df_new):
     if added_ids:
         lines.append(f"🟥 {len(added_ids)} new outages:")
         for outage_id in added_ids:
+            row = df_new[df_new[outage_col] == outage_id]
+            if row.empty:
+                continue
+            row = row.iloc[0]
+            start = parse_dt(row[9])
+            end = parse_dt(row[10])
+            duration = (end - start).days + 1 if pd.notna(start) and pd.notna(end) else "?"
+            qtr = (start.month - 1) // 3 + 1 if pd.notna(start) else "?"
             info = mapping.get(outage_id, {})
             lines.append(
                 f"  {info.get('state', '?')} | {info.get('owner', '?')} | {info.get('substation_desc', '?')} | "
-                f"{info.get('equipment_desc', '?')} | {info.get('set_desc', '?')} | ID: {outage_id}"
+                f"{info.get('equipment_desc', '?')} | {info.get('set_desc', '?')} | "
+                f"{start.date() if pd.notna(start) else '?'} to {end.date() if pd.notna(end) else '?'} "
+                f"({duration} days, Q{qtr} {start.year if pd.notna(start) else '?'})"
             )
 
     if removed_ids:
         lines.append(f"\n🟩 {len(removed_ids)} cleared outages:")
         for outage_id in removed_ids:
+            row = df_old[df_old[outage_col] == outage_id]
+            if row.empty:
+                continue
+            row = row.iloc[0]
+            start = parse_dt(row[9])
+            end = parse_dt(row[10])
+            duration = (end - start).days + 1 if pd.notna(start) and pd.notna(end) else "?"
+            qtr = (start.month - 1) // 3 + 1 if pd.notna(start) else "?"
             info = mapping.get(outage_id, {})
             lines.append(
                 f"  {info.get('state', '?')} | {info.get('owner', '?')} | {info.get('substation_desc', '?')} | "
-                f"{info.get('equipment_desc', '?')} | {info.get('set_desc', '?')} | ID: {outage_id}"
+                f"{info.get('equipment_desc', '?')} | {info.get('set_desc', '?')} | "
+                f"{start.date() if pd.notna(start) else '?'} to {end.date() if pd.notna(end) else '?'} "
+                f"({duration} days, Q{qtr} {start.year if pd.notna(start) else '?'})"
             )
 
     message = "\n".join(lines)
