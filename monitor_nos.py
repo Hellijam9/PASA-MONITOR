@@ -55,13 +55,8 @@ def extract_csv(url):
         file_name = z.namelist()[0]
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
-            if not lines:
-                raise ValueError("❌ No data lines found starting with 'D'.")
-
-            df = pd.read_fwf(StringIO("".join(lines)), widths=[
-                1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 30, 5, 20, 20, 20, 20
-            ], header=None)
+            # Read CSV with proper parsing of quoted fields
+            df = pd.read_csv(f, header=None)
 
             df.columns = [
                 "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
@@ -69,9 +64,11 @@ def extract_csv(url):
                 "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
                 "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
                 "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-            ][:df.shape[1]]
+            ][:df.shape[1]]  # Trim to available columns
 
-            return df
+            # Filter only data lines
+            return df[df["RECTYPE"] == "D"]
+
 
 def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
