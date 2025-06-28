@@ -20,10 +20,7 @@ NEO_CSV_LINKS = {
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
-
-    # Deduplicate file matches from HTML
     matches = sorted(set(re.findall(r'PUBLIC_NETWORK_\d{14}_\d+\.zip', r.text)))
-
     if len(matches) < 30:
         raise ValueError("❌ Not enough NOS ZIP files found.")
 
@@ -42,22 +39,6 @@ def fetch_latest_two_urls():
 
     return BASE_URL + files_with_times[29][1], BASE_URL + files_with_times[0][1]
 
-
-
-
-    df.columns = [
-        "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
-        "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
-        "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
-        "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
-        "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-    ][:df.shape[1]]
-
-    # Clean OUTAGEID to ensure consistent matching
-    df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
-
-    return df
-    
 def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
@@ -82,16 +63,12 @@ def extract_csv(url):
                 "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
             ][:df.shape[1]]
 
-            # Optional cleanup
             df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
             df["SUBSTATIONID"] = df["SUBSTATIONID"].astype(str).str.strip()
             df["STARTTIME"] = df["STARTTIME"].astype(str).str.replace("COMP", "", regex=False)
             df["ENDTIME"] = df["ENDTIME"].astype(str).str.replace("COMP", "", regex=False)
 
             return df
-
-
-
 
 def load_neo_mapping():
     today = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%Y-%m-%d")
@@ -101,32 +78,21 @@ def load_neo_mapping():
         url = url_template.format(today=today)
         try:
             df = pd.read_csv(url)
-
-            # Using column indexes (based on your CSVs)
-            # Assume:  substationid at col 6, state is from state_code key directly
-            # Just map substationid to state_code
-            # Defensive check for required column index
             if df.shape[1] < 7:
                 print(f"⚠️ NeoPoint CSV for {state_code} missing expected columns, skipping")
                 continue
-
-            # Column index 6 is substationid based on your examples (0-based)
-            # Loop rows to build dict
             for substation_id in df.iloc[:,6].dropna().unique():
                 substation_to_state[substation_id] = state_code
-
         except Exception as e:
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
     return substation_to_state
-    
+
 def compare_outages(df_old, df_new):
-    # Load mapping once
     substation_to_state = load_neo_mapping()
 
     def parse_datetime_safe(val):
         try:
-            # Remove junk like COMP or quotes/commas
             val_clean = str(val).strip().replace('"', '').replace(',', '')
             val_clean = val_clean.split()[0] + " " + val_clean.split()[1].split("C")[0]
             return pd.to_datetime(val_clean, errors="coerce", dayfirst=False)
@@ -136,8 +102,11 @@ def compare_outages(df_old, df_new):
     old_ids = set(df_old["OUTAGEID"])
     new_ids = set(df_new["OUTAGEID"])
 
-    added = df_new[df_new["OUTAGEID"].isin(new_ids - old_ids)]
-    removed = df_old[df_old["OUTAGEID"].isin(old_ids - new_ids)]
+    added = df_new[df_new["OUTAGEID"].isin(new_ids - old_ids)].copy()
+    removed = df_old[df_old["OUTAGEID"].isin(old_ids - new_ids)].copy()
+
+    added["REGION"] = added["SUBSTATIONID"].apply(lambda sid: substation_to_state.get(sid, "UNKNOWN"))
+    removed["REGION"] = removed["SUBSTATIONID"].apply(lambda sid: substation_to_state.get(sid, "UNKNOWN"))
 
     message_lines = []
 
@@ -146,8 +115,9 @@ def compare_outages(df_old, df_new):
     else:
         if not added.empty:
             message_lines.append(f"🟥 {len(added)} new outages:")
-            for state, group_state in added.groupby(lambda r: substation_to_state.get(added.loc[r, "SUBSTATIONID"], "UNKNOWN")):
-                message_lines.append(f"\nState: {state}")
+            for region in sorted(added["REGION"].unique()):
+                group_state = added[added["REGION"] == region]
+                message_lines.append(f"\nState: {region}")
                 for substation, group_sub in group_state.groupby("SUBSTATIONID"):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
@@ -161,8 +131,9 @@ def compare_outages(df_old, df_new):
 
         if not removed.empty:
             message_lines.append(f"\n🟩 {len(removed)} cleared outages:")
-            for state, group_state in removed.groupby(lambda r: substation_to_state.get(removed.loc[r, "SUBSTATIONID"], "UNKNOWN")):
-                message_lines.append(f"\nState: {state}")
+            for region in sorted(removed["REGION"].unique()):
+                group_state = removed[removed["REGION"] == region]
+                message_lines.append(f"\nState: {region}")
                 for substation, group_sub in group_state.groupby("SUBSTATIONID"):
                     message_lines.append(f"  Substation: {substation}")
                     for _, row in group_sub.iterrows():
@@ -178,10 +149,6 @@ def compare_outages(df_old, df_new):
     print("\n" + full_message)
     if "🟥" in full_message or "🟩" in full_message:
         requests.post(NTFY_URL, data=full_message.encode("utf-8"))
-
-
-
-
 
 def run_scheduler(test_mode=False):
     if test_mode:
