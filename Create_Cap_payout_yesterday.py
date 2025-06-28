@@ -7,11 +7,11 @@ from urllib.parse import quote
 
 # Create_Cap_payout_yesterday.py
 # Fetches full 24h of Neopoint Region Cap payout data for yesterday
-# and posts a consolidated ntfy message to topic "Cap_yesterday".
+# Computes daily total and divides by 24, then posts to ntfy topic "Cap_yesterday".
 
 # ── CONFIG ─────────────────────────────────────────
-NTFY_TOPIC     = "cap_yesterday"
-NTFY_URL       = "https://ntfy.sh/{NTFY_TOPIC}"
+NTFY_TOPIC     = "Cap_yesterday"
+NTFY_URL       = f"https://ntfy.sh/{NTFY_TOPIC}"  # posting topic
 INTERVAL_HOURS = 5/60  # hours per 5-minute interval
 
 # List of region instances
@@ -46,11 +46,12 @@ def compute_region_payout(df):
     """
     Applies INTERVAL_HOURS multiplication to each payout value, then sums.
     Assumes each non-DateTime column is the payout for that 5-min interval.
+    Returns total payout over 24h.
     """
     total = 0.0
     for col in df.columns:
         if col != "DateTime":
-            # multiply each interval's payout by hours per interval, then sum
+            # multiply each interval's payout by hours per interval
             interval_series = df[col] * INTERVAL_HOURS
             total += interval_series.sum()
     return total
@@ -63,12 +64,13 @@ def main():
 
     for instance in REGION_INSTANCES:
         df = fetch_region_data(instance, yesterday_ts)
-        region_label = ''.join(filter(str.isalpha, instance))
-        payout = compute_region_payout(df)
-        results[region_label] = payout
+        region_label = ''.join(filter(str.isalpha, instance))  # e.g. NSW1 -> NSW
+        daily_total = compute_region_payout(df)
+        # Divide daily total by 24 as requested
+        results[region_label] = daily_total / 24
 
     # Build and send ntfy message
-    lines = ["CAP PAYOUT YESTERDAY"]
+    lines = ["CAP PAYOUT YESTERDAY (Average per Hour)"]
     for region, value in results.items():
         lines.append(f"• {region}: ${value:,.2f}")
     message = "\n".join(lines)
