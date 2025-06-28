@@ -43,29 +43,7 @@ def fetch_latest_two_urls():
     return BASE_URL + files_with_times[29][1], BASE_URL + files_with_times[0][1]
 
 
-def extract_csv(url):
-    print(f"Downloading: {url}")
-    r = requests.get(url)
-    r.raise_for_status()
 
-    with zipfile.ZipFile(BytesIO(r.content)) as z:
-        file_name = z.namelist()[0]
-        print(f"✅ Extracting: {file_name}")
-        with z.open(file_name) as f:
-            lines = []
-            for line in f:
-                try:
-                    decoded = line.decode("utf-8")
-                    if decoded.startswith("D"):
-                        lines.append(decoded)
-                except UnicodeDecodeError:
-                    continue
-
-    # Parse with known fixed widths
-    df = pd.read_fwf(StringIO("".join(lines)), widths=[
-        1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15,
-        15, 20, 20, 20, 30, 50, 20, 20, 20, 20
-    ], header=None)
 
     df.columns = [
         "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
@@ -79,6 +57,38 @@ def extract_csv(url):
     df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
 
     return df
+    
+def extract_csv(url):
+    print(f"Downloading: {url}")
+    r = requests.get(url)
+    r.raise_for_status()
+    with zipfile.ZipFile(BytesIO(r.content)) as z:
+        file_name = z.namelist()[0]
+        print(f"✅ Extracting: {file_name}")
+        with z.open(file_name) as f:
+            lines = [line.decode("utf-8", errors="ignore").strip() for line in f if line.startswith(b"D")]
+            if not lines:
+                raise ValueError("❌ No data lines found starting with 'D'.")
+
+            df = pd.read_fwf(StringIO("\n".join(lines)), widths=[
+                1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 80, 5, 20, 20, 20, 20
+            ], header=None)
+
+            df.columns = [
+                "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
+                "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
+                "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
+                "RECALLTIMENIGHT", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
+                "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
+            ][:df.shape[1]]
+
+            # Optional cleanup
+            df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
+            df["SUBSTATIONID"] = df["SUBSTATIONID"].astype(str).str.strip()
+            df["STARTTIME"] = df["STARTTIME"].astype(str).str.replace("COMP", "", regex=False)
+            df["ENDTIME"] = df["ENDTIME"].astype(str).str.replace("COMP", "", regex=False)
+
+            return df
 
 
 
