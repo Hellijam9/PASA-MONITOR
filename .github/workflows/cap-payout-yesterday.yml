@@ -1,0 +1,24 @@
+# .github/workflows/cap-payout-yesterday.yml
+
+name: Cap Yesterday
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-payout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install pandas requests
+
+      - name: Run cap payout yesterday script
+        run: python Create_Cap_payout_yesterday.py
