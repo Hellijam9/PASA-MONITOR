@@ -17,7 +17,7 @@ NEO_CSV_LINKS = {
     "SA1": "https://www.neopoint.com.au/Service/Csv?f=106%20Flows%20and%20Constraints%5CNOS%20Planned%20Outages%20by%20Region&from={today}%2000%3A00&period=Daily&instances=SA1&section=-1&key=gfi2016"
 }
 
-neo_details = {}  # OUTAGEID → (equipment_desc, set_desc, state)
+neo_details = {}  # OUTAGEID → metadata dict
 
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
@@ -79,14 +79,15 @@ def load_neo_mapping():
         url = url_template.format(today=today)
         try:
             df = pd.read_csv(url)
-            if df.shape[1] < 13:
-                continue
             for _, row in df.iterrows():
                 outage_id = str(row.iloc[2]).strip()
-                equip_desc = str(row.iloc[10]).strip()
-                set_desc = str(row.iloc[12]).strip()
-                state = str(row.iloc[3]).strip()
-                neo_details[outage_id] = (equip_desc, set_desc, state)
+                neo_details[outage_id] = {
+                    "substation_desc": str(row.iloc[6]).strip(),
+                    "equipment_desc": str(row.iloc[9]).strip(),
+                    "set_desc": str(row.iloc[11]).strip(),
+                    "state": str(row.iloc[3]).strip(),
+                    "owner": str(row.iloc[4]).strip(),
+                }
         except:
             continue
 
@@ -121,9 +122,10 @@ def compare_outages(df_old, df_new):
                     continue
                 duration = (end - start).days + 1
                 qtr = (start.month - 1) // 3 + 1
-                eqdesc, setdesc, state = neo_details.get(row["OUTAGEID"], ("", "", "UNKNOWN"))
+                info = neo_details.get(row["OUTAGEID"], {})
                 message_lines.append(
-                    f"  {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year}) | {eqdesc} | {setdesc} | {state}")
+                    f"  {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year}) | "
+                    f"{info.get('equipment_desc','')} | {info.get('set_desc','')} | {info.get('state','UNKNOWN')} | {info.get('owner','')}")
 
         if not removed.empty:
             message_lines.append(f"\n🔺 {len(removed)} cleared outages:")
@@ -134,9 +136,10 @@ def compare_outages(df_old, df_new):
                     continue
                 duration = (end - start).days + 1
                 qtr = (start.month - 1) // 3 + 1
-                eqdesc, setdesc, state = neo_details.get(row["OUTAGEID"], ("", "", "UNKNOWN"))
+                info = neo_details.get(row["OUTAGEID"], {})
                 message_lines.append(
-                    f"  {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year}) | {eqdesc} | {setdesc} | {state}")
+                    f"  {row['EQUIPMENTID']} → {start.date()} to {end.date()} ({duration} days, Q{qtr} {start.year}) | "
+                    f"{info.get('equipment_desc','')} | {info.get('set_desc','')} | {info.get('state','UNKNOWN')} | {info.get('owner','')}")
 
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
