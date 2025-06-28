@@ -47,25 +47,38 @@ def extract_csv(url):
     print(f"Downloading: {url}")
     r = requests.get(url)
     r.raise_for_status()
+
     with zipfile.ZipFile(BytesIO(r.content)) as z:
         file_name = z.namelist()[0]
         print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
-            if not lines:
-                raise ValueError("❌ No data lines found starting with 'D'.")
-            df = pd.read_fwf(StringIO("".join(lines)), widths=[
-                1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 30, 5, 20, 20, 20, 20
-            ], header=None)
+            lines = []
+            for line in f:
+                try:
+                    decoded = line.decode("utf-8")
+                    if decoded.startswith("D"):
+                        lines.append(decoded)
+                except UnicodeDecodeError:
+                    continue
 
-            df.columns = [
-                "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
-                "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
-                "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
-                "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
-                "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-            ][:df.shape[1]]
-            return df
+    # Parse with known fixed widths
+    df = pd.read_fwf(StringIO("".join(lines)), widths=[
+        1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15,
+        15, 20, 20, 20, 30, 50, 20, 20, 20, 20
+    ], header=None)
+
+    df.columns = [
+        "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
+        "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
+        "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
+        "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
+        "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
+    ][:df.shape[1]]
+
+    # Clean OUTAGEID to ensure consistent matching
+    df["OUTAGEID"] = df["OUTAGEID"].astype(str).str.strip()
+
+    return df
 
 
 
