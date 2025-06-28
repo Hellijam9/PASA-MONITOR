@@ -43,26 +43,30 @@ def fetch_latest_two_urls():
     return BASE_URL + files_with_times[29][1], BASE_URL + files_with_times[0][1]
 
 
-def extract_csv(filepath):
-    print(f"✅ Extracting: {filepath}")
-    with zipfile.ZipFile(BytesIO(requests.get(filepath).content)) as z:
+def extract_csv(url):
+    print(f"Downloading: {url}")
+    r = requests.get(url)
+    r.raise_for_status()
+    with zipfile.ZipFile(BytesIO(r.content)) as z:
         file_name = z.namelist()[0]
+        print(f"✅ Extracting: {file_name}")
         with z.open(file_name) as f:
-            df = pd.read_csv(f, engine="python", quotechar='"', skipinitialspace=True)
+            lines = [line.decode("utf-8") for line in f if line.startswith(b"D")]
+            if not lines:
+                raise ValueError("❌ No data lines found starting with 'D'.")
+            df = pd.read_fwf(StringIO("".join(lines)), widths=[
+                1, 15, 15, 5, 10, 15, 15, 15, 15, 10, 12, 15, 15, 20, 20, 20, 30, 5, 20, 20, 20, 20
+            ], header=None)
 
-    # Keep only rows that start with 'D'
-    df = df[df.iloc[:, 0] == "D"].copy()
+            df.columns = [
+                "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
+                "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
+                "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
+                "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
+                "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
+            ][:df.shape[1]]
+            return df
 
-    # Rename known columns (up to the number in the frame)
-    df.columns = [
-        "RECTYPE", "REPORTID", "RECORDTYPE", "VERSION", "OUTAGEID", "SUBSTATIONID",
-        "EQUIPMENTTYPE", "EQUIPMENTID", "STARTTIME", "ENDTIME", "SUBMITTEDDATE",
-        "OUTAGESTATUSCODE", "RESUBMITREASON", "RESUBMITOUTAGEID", "RECALLTIMEDAY",
-        "RECALLTIMENIGHT", "LASTCHANGED", "REASON", "ISSECONDARY", "ACTUAL_STARTTIME",
-        "ACTUAL_ENDTIME", "COMPANYREFCODE", "ELEMENTID"
-    ][:df.shape[1]]
-
-    return df
 
 
 
