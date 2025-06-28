@@ -90,8 +90,8 @@ def main():
         # filter to your fuel-type DUIDs
         sub = sub[sub["DUID"].isin(mapping["DUID"])]
 
-        # diff vs seen
-        merged = sub.merge(seen, on=["DUID","TIME","REGION"], how="left", indicator=True)
+        # ✅ PATCHED LINE: handle REASON column conflict
+        merged = sub.merge(seen, on=["DUID","TIME","REGION"], how="left", indicator=True, suffixes=('', '_old'))
         new    = merged[merged["_merge"]=="left_only"].drop(columns="_merge")
 
         print(f"[{region}] fetched {len(sub)} rows, {len(new)} new rebid(s).")
@@ -103,7 +103,7 @@ def main():
         lines = []
         for region, df_new in all_new:
             lines.append(f"📍 {region} — {len(df_new)} new rebid(s)")
-            enriched = df_new.merge(mapping, on="DUID", how="left", suffixes=('', '_old'))
+            enriched = df_new.merge(mapping, on="DUID", how="left")
             for company, grp in enriched.groupby("COMPANY"):
                 lines.append(f"\n🏢 {company}")
                 for _, r in grp.iterrows():
