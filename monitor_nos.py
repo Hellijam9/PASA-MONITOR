@@ -145,7 +145,7 @@ def compare_outages(df_old, df_new):
     full_message = "\n".join(message_lines)
     print("\n" + full_message)
     if "🟥" in full_message or "🟩" in full_message:
-    requests.post(NTFY_URL, data=full_message.encode("utf-8"))
+        requests.post(NTFY_URL, data=full_message.encode("utf-8"))
 
 
 def run_scheduler(test_mode=False):
