@@ -60,16 +60,18 @@ def load_neo_mapping():
     for state_code, url_template in NEO_CSV_LINKS.items():
         url = url_template.format(today=today)
         try:
+            # Load live NeoPoint CSV without skipping to inspect structure
             df = pd.read_csv(url, header=None, encoding="utf-8", on_bad_lines='skip')
+            # Debug: print shape and first rows to verify columns
+            print(f"📊 NeoPoint raw CSV for {state_code}: shape={df.shape}")
+            print(df.head(5))
 
             for _, row in df.iterrows():
                 if len(row) < 12 or pd.isna(row[2]):
                     continue
-
                 outage_id = str(row[2]).strip().lstrip("0")
                 if outage_id == "" or outage_id.lower() == "nan":
                     continue
-
                 mapping[outage_id] = {
                     "state": str(row[3]).strip() if pd.notna(row[3]) else state_code,
                     "owner": str(row[4]).strip() if pd.notna(row[4]) else "?",
@@ -77,7 +79,6 @@ def load_neo_mapping():
                     "equipment_desc": str(row[9]).strip() if pd.notna(row[9]) else "?",
                     "set_desc": str(row[11]).strip() if pd.notna(row[11]) else "?"
                 }
-
         except Exception as e:
             print(f"⚠️ Failed loading NeoPoint CSV for {state_code}: {e}")
 
