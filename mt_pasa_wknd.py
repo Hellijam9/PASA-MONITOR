@@ -10,7 +10,7 @@ import pytz
 import sys
 
 BASE_URL = "https://www.nemweb.com.au/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
-NTFY_URL = "https://ntfy.sh/pasa-alerts"
+NTFY_URL = "https://ntfy.sh/wknd-power"
 
 def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
