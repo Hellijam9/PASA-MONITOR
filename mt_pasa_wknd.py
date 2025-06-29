@@ -16,13 +16,13 @@ def fetch_latest_two_urls():
     r = requests.get(BASE_URL)
     r.raise_for_status()
     matches = set(re.findall(r'PUBLIC_MTPASADUIDAVAILABILITY_\d{12}_\d+\.zip', r.text))
-    if len(matches) < 2:
+    if len(matches) < 6:
         raise ValueError("❌ Not enough unique MTPASA ZIP files found.")
     def extract_dt(filename):
         match = re.search(r'_(\d{12})_', filename)
         return datetime.strptime(match.group(1), "%Y%m%d%H%M") if match else datetime.min
     sorted_files = sorted(matches, key=extract_dt, reverse=True)
-    return BASE_URL + sorted_files[1], BASE_URL + sorted_files[0]
+    return BASE_URL + sorted_files[5], BASE_URL + sorted_files[0]
 
 def extract_csv(url):
     print(f"Downloading: {url}")
