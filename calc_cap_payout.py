@@ -35,7 +35,7 @@ def fetch_pd():
     return df
 
 def compute_payouts(df):
-    # Data covers next 12 hours inherently, so compute on full df
+    # Data covers 24 hours inherently, so compute on full df
     results = {}
     for col in df.columns:
         if col.endswith("Price"):
@@ -43,11 +43,11 @@ def compute_payouts(df):
             # per-interval payout
             payouts = (df[col] - CAP_STRIKE).clip(lower=0) * CAP_VOLUME * INTERVAL_HOURS
             # sum and divide by 60 as requested
-            results[region] = payouts.sum() / 60
+            results[region] = payouts.sum() / 24
     return results
 
 def send_ntfy(results):
-    lines = ["CAP PAYOUT NEXT 12 HOURS"]
+    lines = ["CAP PAYOUT UNTIL MIDNIGHT"]
     for region, payout in results.items():
         lines.append(f"• {region}: ${payout:,.2f}")
     msg = "\n".join(lines)
