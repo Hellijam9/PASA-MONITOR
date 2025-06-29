@@ -1,4 +1,4 @@
-name: Triggered MTPASA Summary
+name: pasa wknd
 
 on:
   workflow_dispatch:
@@ -23,4 +23,4 @@ jobs:
           pip install pandas requests
 
       - name: Run MTPASA script
-        run: python mtpasa_scheduler.py --test
+        run: python pasa-wknd.py --test
