@@ -47,7 +47,7 @@ def compute_payouts(df):
     return results
 
 def send_ntfy(results):
-    lines = ["CAP PAYOUT UNTIL MIDNIGHT"]
+    lines = ["CAP PAYOUT TODAY MIDNIGHT UNTIL MIDNIGHT"]
     for region, payout in results.items():
         lines.append(f"• {region}: ${payout:,.2f}")
     msg = "\n".join(lines)
