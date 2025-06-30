@@ -49,10 +49,12 @@ def compute_payouts(df):
 def send_ntfy(results):
     lines = ["CAP PAYOUT TODAY MIDNIGHT UNTIL MIDNIGHT"]
     for region, payout in results.items():
-        lines.append(f"• {region}: ${payout:,.2f}")
+        qrtr_approx = payout / 90  # Assuming 90 days in a quarter
+        lines.append(f"• {region}: ${payout:,.2f}  (add approx. ${qrtr_approx:,.2f} to qrtr)")
     msg = "\n".join(lines)
     print(msg)
     requests.post(NTFY_URL, data=msg.encode("utf-8"))
+
 
 def main():
     df = fetch_pd()
