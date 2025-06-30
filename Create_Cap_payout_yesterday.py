@@ -69,10 +69,10 @@ def main():
         # Divide daily total by 24 as requested
         results[region_label] = daily_total / 24
 
-    # Build and send ntfy message
+   # Build and send ntfy message
     lines = ["CAP PAYOUT YESTERDAY (Average per Hour)"]
     for region, value in results.items():
-        lines.append(f"• {region}: ${value:,.2f}")
+        lines.append(f"• {region}: ${value:,.2f} (add approx. ${value/90:,.2f} to QRTR)")
     message = "\n".join(lines)
     print(message)
     requests.post(NTFY_URL, data=message.encode("utf-8"))
