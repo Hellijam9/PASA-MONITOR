@@ -70,7 +70,7 @@ def main():
         results[region_label] = daily_total / 24
 
    # Build and send ntfy message
-    lines = ["CAP PAYOUT YESTERDAY (Average per Hour)"]
+    lines = ["CAP PAYOUT YESTERDAY"]
     for region, value in results.items():
         lines.append(f"• {region}: ${value:,.2f} (add approx. ${value/90:,.2f} to QRTR)")
     message = "\n".join(lines)
